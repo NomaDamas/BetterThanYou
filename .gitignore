@@ -3,3 +3,4 @@ reports/*.html
 reports/*.json
 coverage
 .DS_Store
+packages/core/test/tmp-artifacts/
