@@ -1,0 +1,7 @@
+interface:
+  display_name: "BetterThanYou Battle"
+  short_description: "Build and evolve BetterThanYou battle flows with one shared scoring engine"
+  brand_color: "#F97316"
+  default_prompt: "Implement BetterThanYou battle functionality while keeping packages/core as the shared engine"
+policy:
+  allow_implicit_invocation: true

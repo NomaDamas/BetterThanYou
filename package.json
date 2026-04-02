@@ -1,0 +1,31 @@
+{
+  "name": "better-than-you",
+  "private": true,
+  "description": "CLI-first portrait battle tool for fictional AI-generated adult portraits.",
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "bin": {
+    "better-than-you": "packages/cli/bin/better-than-you.js"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "cli": "node packages/cli/bin/better-than-you.js",
+    "battle": "node packages/cli/bin/better-than-you.js battle",
+    "report": "node packages/cli/bin/better-than-you.js report",
+    "open": "node packages/cli/bin/better-than-you.js open",
+    "build": "node scripts/build-check.js",
+    "mcp": "node packages/mcp-server/src/server.js",
+    "test": "node --test packages/core/test/*.test.js packages/cli/test/*.test.js packages/mcp-server/test/*.test.js apps/web/test/*.test.js",
+    "web": "node apps/web/src/server.js",
+    "web:helper": "node apps/web/src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jimp": "^1.6.0"
+  }
+}

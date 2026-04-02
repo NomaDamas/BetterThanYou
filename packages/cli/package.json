@@ -1,0 +1,15 @@
+{
+  "name": "@better-than-you/cli",
+  "version": "0.2.0",
+  "description": "CLI-first portrait battle command for BetterThanYou.",
+  "type": "module",
+  "bin": {
+    "better-than-you": "./bin/better-than-you.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@better-than-you/core": "workspace:*"
+  }
+}

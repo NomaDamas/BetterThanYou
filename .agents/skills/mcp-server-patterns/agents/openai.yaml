@@ -1,0 +1,7 @@
+interface:
+  display_name: "MCP Server Patterns"
+  short_description: "Patterns for building MCP servers with the Node/TypeScript SDK"
+  brand_color: "#2563EB"
+  default_prompt: "Implement or review an MCP server: tools, resources, transport, and validation"
+policy:
+  allow_implicit_invocation: true

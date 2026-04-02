@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BetterThanYou • Aurora vs Blaze</title>
+    <style>
+      :root {
+        --bg: #0d0f14;
+        --panel: rgba(18, 23, 34, 0.82);
+        --panel-strong: rgba(21, 28, 43, 0.92);
+        --line: rgba(255, 255, 255, 0.1);
+        --text: #f5efe4;
+        --muted: #c7b9a5;
+        --accent: #ff8c42;
+        --accent-2: #78f0d4;
+        --loss: #8db7ff;
+        --win: #ffcf5a;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(255, 140, 66, 0.28), transparent 36%),
+          radial-gradient(circle at right center, rgba(120, 240, 212, 0.18), transparent 28%),
+          linear-gradient(140deg, #090b10 0%, #111722 55%, #0f1116 100%);
+        color: var(--text);
+        font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+      }
+
+      .shell {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 72px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 20px;
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(12, 16, 25, 0.88), rgba(17, 22, 34, 0.9));
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+      }
+
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.24em;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .winner-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .winner-row h1 {
+        margin: 0;
+        font-size: clamp(38px, 7vw, 84px);
+        line-height: 0.95;
+        text-transform: uppercase;
+      }
+
+      .winner-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(255, 207, 90, 0.14);
+        color: var(--win);
+        font-size: 14px;
+      }
+
+      .totals {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      .score-panel,
+      .axis-card,
+      .narrative-block,
+      .input-card {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+      }
+
+      .score-panel {
+        padding: 18px;
+      }
+
+      .score-panel small,
+      .axis-card small {
+        color: var(--muted);
+        display: block;
+      }
+
+      .score-panel strong {
+        display: block;
+        font-size: 42px;
+        margin-top: 8px;
+      }
+
+      .inputs,
+      .narrative,
+      .axes {
+        margin-top: 24px;
+      }
+
+      .inputs {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+      }
+
+      .input-card {
+        overflow: hidden;
+      }
+
+      .input-card img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 5;
+        object-fit: cover;
+      }
+
+      .input-copy {
+        padding: 18px;
+      }
+
+      .input-copy h2 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+
+      .axis-grid,
+      .narrative-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+      }
+
+      .axis-card {
+        padding: 18px;
+      }
+
+      .axis-card header,
+      .axis-values {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .axis-card header {
+        margin-bottom: 14px;
+      }
+
+      .axis-card.left-win { box-shadow: inset 0 0 0 1px rgba(255, 207, 90, 0.34); }
+      .axis-card.right-win { box-shadow: inset 0 0 0 1px rgba(141, 183, 255, 0.34); }
+      .axis-card.tie { box-shadow: inset 0 0 0 1px rgba(120, 240, 212, 0.2); }
+
+      .narrative-block {
+        padding: 20px;
+      }
+
+      .narrative-block h3 {
+        margin: 0 0 10px;
+        font-size: 18px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .narrative-block p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      footer {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">BetterThanYou • Winner First</div>
+        <div class="winner-row">
+          <div>
+            <div class="winner-pill">Winner • Blaze</div>
+            <h1>Blaze</h1>
+          </div>
+          <div>
+            <div class="eyebrow">Engine</div>
+            <strong>deterministic-heuristic-v1</strong>
+          </div>
+        </div>
+        <p>Blaze takes the battle with a controlled edge, landing at 69.5 to 62.1. The biggest pressure points were color vitality and the overall style read.</p>
+        <div class="totals">
+          <article class="score-panel">
+            <small>Aurora</small>
+            <strong>62.1</strong>
+          </article>
+          <article class="score-panel">
+            <small>Blaze</small>
+            <strong>69.5</strong>
+          </article>
+          <article class="score-panel">
+            <small>Margin</small>
+            <strong>7.4</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="inputs">
+        <article class="input-card">
+          <img alt="Aurora" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACgCAYAAADEkmT9AAACqElEQVR4Ae3BsY3sBBSF4Z+jybaElbYuIqq4suQIEV3pylUQUQoVUMCTXge8GAICAoRYz9ieQed833e///brH4QtEdZEWBNhTYQ1EdZEWBNhTYS1Gwfa1oW4RvVwBBHWRFgTYU2ENRHWRFgTYU2ENRHWRFgTYU2ENRHWbjzRjz//Qvzlpx++5xlEWBNhTYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdZEWLvxwr59/cJeb+8fnO3b1y/s9fb+wSsSYU2ENRHWRFgTYU2ENRHWxEG2dSGus60LRxAH2NaFuN62LjxKPGhbF+J5tnXhEeIB27oQz7etC/cSd9rWhXgd27pwD3GHbV2I17OtC3uJnbZ1IV7Xti7scWOHbV240tv7B6/o7f2DV7atC9XDZ4gdqod4fdXDZ4mdqod4XdXDHuIO1UO8nuphL3Gn6iFeR/VwD/GA6iGer3q4l3hQ9RDPUz08QhygeojrVQ+PEgepHuI61cMRxIGqhzhf9XAUcbDqIc5TPRxJnKB6iONVD0cTJ6ke4jjVwxnEiaqHeFz1cBZxsuoh7lc9nElcoHqI/aqHs4mLVA/xedXDFcSFqof4b9XDVcTFqof4d9XDlcQTVA/xT9XD1cSTVA/xt+rhGURYE2FNhDUR1kRYE2FNhDUR1kRYE2FNhDUR1kRYE2Htxg7buhD/D9XDZ4iwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirImwJsKaCGsirP0JlldqYBnlfWEAAAAASUVORK5CYII=" />
+          <div class="input-copy">
+            <h2>Aurora</h2>
+            <p>Aurora peaks in symmetry & harmony and composition & presence, giving the portrait a confident first read in the side-by-side.</p>
+          </div>
+        </article>
+        <article class="input-card">
+          <img alt="Blaze" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACgCAYAAADEkmT9AAACq0lEQVR4Ae3BvZEUCRCE0W+z1ozFhdVLbHV1AkzAJEyAwIgS2xBwo2MREE64uLj56ekZIvO9p5fXt3fClghrIqyJsCbCmghrIqyJsCbC2jM7WpeNOEZPsQcR1kRYE2FNhDUR1kRYE2FNhDUR1kRYE2FNhDUR1p65o5cvn4k/fn39xj2IsCbCmghrIqyJsCbCmghrIqyJsCbCmghrIqyJsCbCmghrIqyJsCbCmghrIqyJsCbCmghrIqyJsCbCmghrIqyJsCbCmghrIqyJsPbMA/vw6Qfn+vn9I7f24dMPzvXz+0cekQhrIqyJsCbCmghrIqyJsCZ2si4bcZx12diD2MG6bMTx1mXjWuJK67IR97MuG9cQV1iXjbi/ddm4lLjQumzE41iXjUuIC6zLRjyeddk4lzjTumzE41qXjXM8vby+vXOiddnY08uXz8Qfv75+Y089xSnEGXqKeHw9xanEmXqKeFw9xTnEBXqKeDw9xbnEhXqKeBw9xSXEFXqKuL+e4lLiSj1F3E9PcQ2xg54ijtdTXEvspKeI4/QUexA76ini9nqKvYid9RRxOz3FnsQN9BSxv55ib+JGeorYT09xC+KGeoq4Xk9xK+LGeoq4XE9xS+IAPUWcr6e4NXGQniJO11McQRyop4j/11McRRysp4j/1lMcSdxBTxH/1lMcTdxJTxH/6CnuQYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdZEWBNhTYQ1EdaeXl7f3jnRumzE36GnOIUIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwpoIayKsibAmwtpvVeleeyoAP8QAAAAASUVORK5CYII=" />
+          <div class="input-copy">
+            <h2>Blaze</h2>
+            <p>Blaze shows its best form in symmetry & harmony and composition & presence, which keeps the matchup competitive even when it loses.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="axes">
+        <div class="eyebrow">Quantitative Axes</div>
+        <div class="axis-grid">
+      <article class="axis-card right-win">
+        <header>
+          <span>Symmetry & Harmony</span>
+          <strong>0.1 pt gap</strong>
+        </header>
+        <div class="axis-values">
+          <div>
+            <small>Aurora</small>
+            <b>98.9</b>
+          </div>
+          <div>
+            <small>Blaze</small>
+            <b>99.0</b>
+          </div>
+        </div>
+      </article>
+    
+      <article class="axis-card right-win">
+        <header>
+          <span>Lighting & Contrast</span>
+          <strong>4.4 pt gap</strong>
+        </header>
+        <div class="axis-values">
+          <div>
+            <small>Aurora</small>
+            <b>64.1</b>
+          </div>
+          <div>
+            <small>Blaze</small>
+            <b>68.5</b>
+          </div>
+        </div>
+      </article>
+    
+      <article class="axis-card tie">
+        <header>
+          <span>Sharpness & Detail</span>
+          <strong>0.0 pt gap</strong>
+        </header>
+        <div class="axis-values">
+          <div>
+            <small>Aurora</small>
+            <b>22.0</b>
+          </div>
+          <div>
+            <small>Blaze</small>
+            <b>22.0</b>
+          </div>
+        </div>
+      </article>
+    
+      <article class="axis-card right-win">
+        <header>
+          <span>Color Vitality</span>
+          <strong>18.7 pt gap</strong>
+        </header>
+        <div class="axis-values">
+          <div>
+            <small>Aurora</small>
+            <b>41.5</b>
+          </div>
+          <div>
+            <small>Blaze</small>
+            <b>60.2</b>
+          </div>
+        </div>
+      </article>
+    
+      <article class="axis-card right-win">
+        <header>
+          <span>Composition & Presence</span>
+          <strong>2.7 pt gap</strong>
+        </header>
+        <div class="axis-values">
+          <div>
+            <small>Aurora</small>
+            <b>82.7</b>
+          </div>
+          <div>
+            <small>Blaze</small>
+            <b>85.4</b>
+          </div>
+        </div>
+      </article>
+    
+      <article class="axis-card right-win">
+        <header>
+          <span>Style Aura</span>
+          <strong>17.6 pt gap</strong>
+        </header>
+        <div class="axis-values">
+          <div>
+            <small>Aurora</small>
+            <b>61.6</b>
+          </div>
+          <div>
+            <small>Blaze</small>
+            <b>79.2</b>
+          </div>
+        </div>
+      </article>
+    </div>
+      </section>
+
+      <section class="narrative">
+        <div class="eyebrow">Qualitative Analysis</div>
+        <div class="narrative-grid">
+          <section class="narrative-block"><h3>Overall Take</h3><p>Blaze takes the battle with a controlled edge, landing at 69.5 to 62.1. The biggest pressure points were color vitality and the overall style read.</p></section>
+          <section class="narrative-block"><h3>Why This Won</h3><p>Blaze won because it led 5 of 6 axes and created its best separation in color vitality by 18.7 points.</p></section>
+          <section class="narrative-block"><h3>Aurora Weaknesses</h3><p>Aurora leaves points on the table in sharpness & detail and color vitality, so its lower-end moments feel less polished.</p></section>
+          <section class="narrative-block"><h3>Blaze Weaknesses</h3><p>Blaze loses ground most visibly in sharpness & detail and color vitality, which softens the overall punch.</p></section>
+          <section class="narrative-block"><h3>Model Jury Notes</h3><p>Jury notes are heuristic-only in v1. The engine is deterministic, favors centered portrait presence, and treats totals within 2.5 points as near toss-up territory.</p></section>
+        </div>
+      </section>
+
+      <footer>
+        Generated 2026-04-02T08:29:12.169Z • BetterThanYou • 2026-04-02T08-29-12-169Z-aurora-blaze
+      </footer>
+    </main>
+  </body>
+</html>
