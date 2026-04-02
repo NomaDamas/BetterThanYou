@@ -12,34 +12,57 @@ for non-developers and static report viewing.
 - Durable artifact: shareable static HTML report in `reports/`
 - Optional surfaces: web helper for non-devs, MCP for automation/agents
 
-## Quick Start
+## Install
+
+### Best current local install
 
 ```bash
 cd /Users/jinminseong/Desktop/BetterThanYou
 pnpm install
+pnpm cli
+```
+
+### If `pnpm link --global` fails
+
+That error means `PNPM_HOME` is not set up yet. Run this once:
+
+```bash
+pnpm setup
+exec $SHELL -l
+```
+
+Then retry:
+
+```bash
 pnpm link --global
 better-than-you
 ```
 
-If you do not want a global link, you can still run it directly:
+### Homebrew formula path
+
+A formula is included in this repo now. You can install it from the checked-out
+repository like this:
 
 ```bash
-pnpm cli
-pnpm battle -- ./left.png ./right.png
+brew install --build-from-source ./Formula/better-than-you.rb
+better-than-you
 ```
+
+When this repo has stable release tarballs and checksums, the same formula can
+be promoted into a normal tap flow.
 
 ## Best CLI Flows
 
 Direct drag-and-drop path flow:
 
 ```bash
-better-than-you battle /absolute/path/to/left.png /absolute/path/to/right.png
+better-than-you /absolute/path/to/left.png /absolute/path/to/right.png
 ```
 
-Implicit battle mode without typing the subcommand:
+Explicit battle mode:
 
 ```bash
-better-than-you /absolute/path/to/left.png /absolute/path/to/right.png
+better-than-you battle /absolute/path/to/left.png /absolute/path/to/right.png
 ```
 
 Guided mode for drag-and-drop after launch:
@@ -86,6 +109,8 @@ better-than-you open [latest|path] [--out-dir path]
 - `packages/mcp-server`: automation adapter for agents and toolchains
 - `apps/web`: optional helper UI for non-developers
 - `reports/`: generated HTML and JSON artifacts
+- `Formula/better-than-you.rb`: Homebrew install structure
+- `.github/workflows/ci.yml`: automated build and test checks on GitHub
 
 ## Commands
 
@@ -99,10 +124,3 @@ pnpm open
 pnpm web
 pnpm mcp
 ```
-
-## Brew Direction
-
-The repo is now structured so the root package exposes a real `better-than-you`
-bin. That makes Homebrew packaging straightforward once this repository has a
-stable remote URL and versioned release tarballs. Until then, `pnpm link --global`
-is the quickest install path.

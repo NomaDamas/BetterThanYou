@@ -4,7 +4,9 @@ const ANSI = {
   amber: "\u001b[38;5;215m",
   cyan: "\u001b[38;5;80m",
   blue: "\u001b[38;5;111m",
-  dim: "\u001b[38;5;246m"
+  dim: "\u001b[38;5;246m",
+  green: "\u001b[38;5;120m",
+  red: "\u001b[38;5;203m"
 };
 
 function paint(text, color, enabled = true) {
@@ -13,49 +15,73 @@ function paint(text, color, enabled = true) {
 
 function meter(score) {
   const filled = Math.max(1, Math.round(score / 5));
-  return `[${"#".repeat(filled)}${".".repeat(20 - filled)}]`;
+  return `${"█".repeat(filled)}${"░".repeat(20 - filled)}`;
+}
+
+function padCenter(value, width) {
+  const text = String(value);
+  const totalPadding = Math.max(0, width - text.length);
+  const left = Math.floor(totalPadding / 2);
+  const right = totalPadding - left;
+  return `${" ".repeat(left)}${text}${" ".repeat(right)}`;
+}
+
+function boxedTitle(title, color, width = 84, enabled = true) {
+  const inner = Math.max(0, width - 4);
+  const centered = padCenter(title, inner);
+  return [
+    paint(`╔${"═".repeat(inner)}╗`, color, enabled),
+    paint(`║ ${centered.slice(1, inner - 1)} ║`, color, enabled),
+    paint(`╚${"═".repeat(inner)}╝`, color, enabled)
+  ];
 }
 
 function signedGap(card, winnerId) {
   if (card.leader === "tie") {
-    return "TIE ";
+    return { text: "TIE ", color: ANSI.cyan };
   }
 
   const sign = card.leader === winnerId ? "+" : "-";
-  return `${sign}${card.diff.toFixed(1)}`.padStart(4);
+  const color = card.leader === winnerId ? ANSI.green : ANSI.red;
+  return {
+    text: `${sign}${card.diff.toFixed(1)}`.padStart(5),
+    color
+  };
 }
 
 export function renderTerminalBattle(result, artifacts, options = {}) {
   const color = options.color !== false;
   const lines = [];
-  const divider = "=".repeat(84);
-  const softDivider = "-".repeat(84);
+  const width = 84;
   const winnerColor = result.winner.id === "left" ? ANSI.amber : ANSI.blue;
+  const winnerBanner = boxedTitle(`WINNER // ${result.winner.label.toUpperCase()}`, winnerColor, width, color);
 
-  lines.push(paint(divider, ANSI.dim, color));
-  lines.push(paint("BETTERTHANYOU // CLI PORTRAIT BATTLE", ANSI.bold, color));
-  lines.push(paint(divider, ANSI.dim, color));
-  lines.push(paint(`WINNER : ${result.winner.label.toUpperCase()}`, winnerColor, color));
-  lines.push(`TOTAL  : ${result.inputs.left.label} ${result.scores.left.total.toFixed(1)}  vs  ${result.inputs.right.label} ${result.scores.right.total.toFixed(1)}`);
-  lines.push(`MARGIN : ${result.winner.margin.toFixed(1)} points`);
-  lines.push(softDivider);
+  lines.push(...boxedTitle("BETTERTHANYOU // CLI PORTRAIT BATTLE", ANSI.bold, width, color));
+  lines.push(...winnerBanner);
+  lines.push(paint(`TOTAL   ${result.inputs.left.label} ${result.scores.left.total.toFixed(1)}  vs  ${result.inputs.right.label} ${result.scores.right.total.toFixed(1)}`, ANSI.dim, color));
+  lines.push(paint(`MARGIN  ${result.winner.margin.toFixed(1)} points`, ANSI.dim, color));
+  lines.push("");
   lines.push(paint("ABILITY COMPARISON", ANSI.cyan, color));
+  lines.push(paint("Axis                      Left                         Right                        Gap", ANSI.dim, color));
 
   for (const card of result.axisCards) {
-    lines.push(`${card.label.padEnd(24)} ${String(card.left.toFixed(1)).padStart(5)} ${meter(card.left)} | ${String(card.right.toFixed(1)).padStart(5)} ${meter(card.right)}  ${signedGap(card, result.winner.id)}`);
+    const gap = signedGap(card, result.winner.id);
+    const gapText = paint(gap.text, gap.color, color);
+    lines.push(
+      `${card.label.padEnd(24)} ${String(card.left.toFixed(1)).padStart(5)} ${meter(card.left)} | ${String(card.right.toFixed(1)).padStart(5)} ${meter(card.right)}  ${gapText}`
+    );
   }
 
-  lines.push(softDivider);
+  lines.push("");
   lines.push(paint("OVERALL TAKE", ANSI.cyan, color));
   lines.push(result.sections.overallTake);
-  lines.push(softDivider);
+  lines.push("");
   lines.push(paint("WHY THIS WON", ANSI.cyan, color));
   lines.push(result.sections.whyThisWon);
-  lines.push(softDivider);
+  lines.push("");
   lines.push(paint("SAVE FILES", ANSI.cyan, color));
   lines.push(paint(`HTML report : ${artifacts.htmlPath}`, ANSI.dim, color));
   lines.push(paint(`JSON result : ${artifacts.jsonPath}`, ANSI.dim, color));
-  lines.push(paint(divider, ANSI.dim, color));
 
   return lines.join("\n");
 }
@@ -63,7 +89,7 @@ export function renderTerminalBattle(result, artifacts, options = {}) {
 export function renderReportSummary(report, options = {}) {
   const color = options.color !== false;
   const lines = [];
-  lines.push(paint("BETTERTHANYOU // REPORT REBUILT", ANSI.bold, color));
+  lines.push(...boxedTitle("BETTERTHANYOU // REPORT REBUILT", ANSI.bold, 84, color));
   lines.push(paint(`HTML report : ${report.htmlPath}`, ANSI.dim, color));
   lines.push(paint(`JSON result : ${report.jsonPath}`, ANSI.dim, color));
   return lines.join("\n");
