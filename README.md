@@ -1,30 +1,35 @@
 # BetterThanYou
 
-BetterThanYou is now moving to a Rust-first CLI/TUI runtime for the real product.
-The JavaScript code is still in the repository as a legacy prototype path, but
-Rust is the intended long-term binary and Homebrew target.
+BetterThanYou is now Rust-first. The Rust CLI/TUI is the real product runtime.
+The JavaScript code remains in the repository as a legacy prototype path for
+comparison and migration continuity.
 
-## Core Idea
+## Product State
 
-- Primary surface: Rust CLI/TUI in tmux, Terminal, or iTerm
-- Fastest input: drag two files into the terminal or paste two URLs
-- Primary output: winner-first battle screen with stat-by-stat comparison
-- Durable artifact: shareable static HTML report in `reports/`
-- Optional surfaces: web helper for non-devs, MCP for automation/agents
-- Judge modes: `auto`, `heuristic`, `openai`
+- Primary runtime: Rust binary in `Cargo.toml` and `src/`
+- Primary UX: terminal-first battle app
+- Optional judge modes: `heuristic`, `auto`, `openai`
+- Optional helper surfaces: legacy JS web helper and MCP bridge
+- Durable outputs: HTML and JSON battle reports in `reports/`
 
-## Rust Quick Start
+## Fastest Run Path
 
 ```bash
 cd /Users/jinminseong/Desktop/BetterThanYou
 cargo run -- /absolute/path/to/left.png /absolute/path/to/right.png --judge heuristic --no-app
 ```
 
-Run tests:
+## Fullscreen Terminal App
 
 ```bash
-cargo test
+cargo run -- /absolute/path/to/left.png /absolute/path/to/right.png --judge auto
 ```
+
+Keys in app mode:
+- `o` open the generated HTML report
+- `q` quit the fullscreen result screen
+
+Use `--no-app` to force plain terminal output.
 
 ## OpenAI VLM Judge
 
@@ -33,28 +38,63 @@ export OPENAI_API_KEY=your_key
 cargo run -- /absolute/path/to/left.png /absolute/path/to/right.png --judge openai --model gpt-4.1-mini --no-app
 ```
 
-`--judge auto` will use OpenAI when an API key exists, otherwise it falls back
-to the local heuristic engine.
+`--judge auto` uses OpenAI when an API key is set. Otherwise it falls back to
+local heuristic scoring.
 
-## App-Like Terminal Mode
+## Rust Test and Build
 
 ```bash
-cargo run -- /absolute/path/to/left.png /absolute/path/to/right.png --judge auto
+cargo check
+cargo test
 ```
-
-In terminal app mode:
-- `o` opens the generated HTML report
-- `q` exits the fullscreen result screen
-
-Use `--no-app` to force plain terminal output.
-
-## Homebrew Direction
-
-The formula is being shifted toward the Rust binary path. For a proper public
-`brew install better-than-you` experience, the next step is to publish a tap or
-release tarballs for the Rust crate version.
 
 ## Legacy JS Path
 
-The previous Node/JS prototype still exists and can still be inspected, but the
-Rust crate in `Cargo.toml` and `src/` is now the primary migration target.
+The JavaScript path still exists for continuity:
+
+```bash
+pnpm install
+pnpm build
+pnpm test
+```
+
+But Rust is the product direction.
+
+## Homebrew Direction
+
+The formula now targets the Rust binary release path. For a stable public brew
+install, publish a tag and a tap, then point the formula at the release tarball.
+
+Current local-tap pattern:
+
+```bash
+brew tap-new NomaDamas/better-than-you
+cp ./Formula/better-than-you.rb $(brew --repository)/Library/Taps/nomadamas/homebrew-better-than-you/Formula/better-than-you.rb
+brew reinstall NomaDamas/better-than-you/better-than-you
+better-than-you --help
+```
+
+## Judge Logic
+
+### Heuristic
+
+Fast local image scoring using six axes:
+- symmetry_harmony
+- lighting_contrast
+- sharpness_detail
+- color_vitality
+- composition_presence
+- style_aura
+
+### OpenAI
+
+Image-to-JSON VLM judging through the OpenAI Responses API. The model returns a
+winner, per-axis scores, and qualitative sections.
+
+## Outputs
+
+Each battle writes:
+- one HTML report
+- one JSON result
+- `latest-battle.html`
+- `latest-battle.json`
