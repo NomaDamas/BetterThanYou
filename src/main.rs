@@ -1,7 +1,10 @@
+use std::fs;
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
+use std::process::Command;
 
 use anyhow::{bail, Result};
+use serde::{Deserialize, Serialize};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, open_path, present_terminal_battle_app,
     read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
@@ -108,8 +111,41 @@ struct OpenArgs {
     out_dir: Option<PathBuf>,
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct AppState {
+    star_acknowledged: bool,
+}
+
+fn app_state_path() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(PathBuf::from(home).join(".config/better-than-you/state.json"))
+}
+
+fn load_app_state() -> AppState {
+    let Some(path) = app_state_path() else { return AppState::default(); };
+    let Ok(bytes) = fs::read(path) else { return AppState::default(); };
+    serde_json::from_slice(&bytes).unwrap_or_default()
+}
+
+fn save_app_state(state: &AppState) -> Result<()> {
+    let Some(path) = app_state_path() else { return Ok(()); };
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, serde_json::to_vec_pretty(state)?)?;
+    Ok(())
+}
+
+fn maybe_print_star_reminder(state: &AppState) {
+    if !state.star_acknowledged {
+        eprintln!("Support BetterThanYou by starring https://github.com/NomaDamas/BetterThanYou . Run the app and press 's' to open the star page and hide this reminder.");
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SessionState {
+    app_state: AppState,
     left: Option<String>,
     right: Option<String>,
     left_label: Option<String>,
@@ -124,6 +160,7 @@ struct SessionState {
 impl SessionState {
     fn new() -> Self {
         Self {
+            app_state: load_app_state(),
             left: None,
             right: None,
             left_label: None,
@@ -314,6 +351,9 @@ fn render_start_screen(state: &SessionState) {
     println!("  7  run battle");
     println!("  8  rematch last pair");
     println!("  9  open latest report");
+    if !state.app_state.star_acknowledged {
+        println!("  s  open GitHub star page and hide reminder");
+    }
     println!("  q  quit");
     println!();
 }
@@ -405,6 +445,14 @@ async fn run_interactive_app() -> Result<()> {
                 println!("{}", render_open_summary(&path, io::stdout().is_terminal()));
                 let _ = prompt_line("Press Enter to continue > ")?;
             }
+            "s" => {
+                let star_url = "https://github.com/NomaDamas/BetterThanYou";
+                if open_path(PathBuf::from(star_url).as_path()).is_err() {
+                    let _ = Command::new("open").arg(star_url).status();
+                }
+                state.app_state.star_acknowledged = true;
+                save_app_state(&state.app_state)?;
+            }
             "q" | "quit" | "exit" => break,
             _ => {
                 println!("Unknown action. Press Enter to continue.");
@@ -424,6 +472,10 @@ async fn main() -> Result<()> {
         Some(Commands::Report(args)) => run_report(args).await,
         Some(Commands::Open(args)) => run_open(args),
         None => {
+            let app_state = load_app_state();
+            if !(cli.left.is_none() && cli.right.is_none() && cli.left_label.is_none() && cli.right_label.is_none() && !cli.left_clipboard && !cli.right_clipboard && !cli.json && !cli.open && io::stdin().is_terminal() && io::stdout().is_terminal()) {
+                maybe_print_star_reminder(&app_state);
+            }
             if cli.left.is_none()
                 && cli.right.is_none()
                 && cli.left_label.is_none()
