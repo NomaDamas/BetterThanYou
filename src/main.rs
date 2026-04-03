@@ -260,7 +260,7 @@ fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: 
 
 fn maybe_print_star_reminder(state: &AppState) {
     if !state.star_acknowledged {
-        eprintln!("Support BetterThanYou by starring https://github.com/NomaDamas/BetterThanYou . Run better-than-you with no args and press 's' to open the star page and hide this reminder.");
+        eprintln!("Support BetterThanYou by starring https://github.com/NomaDamas/BetterThanYou . This reminder will keep appearing on startup until you choose the GitHub star action inside the app.");
     }
 }
 
@@ -656,9 +656,7 @@ async fn main() -> Result<()> {
         Some(Commands::Open(args)) => run_open(args),
         None => {
             let app_state = load_app_state();
-            if !(cli.left.is_none() && cli.right.is_none() && cli.left_label.is_none() && cli.right_label.is_none() && !cli.left_clipboard && !cli.right_clipboard && !cli.json && !cli.open && io::stdin().is_terminal() && io::stdout().is_terminal()) {
-                maybe_print_star_reminder(&app_state);
-            }
+            maybe_print_star_reminder(&app_state);
             if cli.left.is_none()
                 && cli.right.is_none()
                 && cli.left_label.is_none()
