@@ -6,9 +6,10 @@ use std::process::Command;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use better_than_you::{
-    analyze_portrait_battle, default_reports_dir, open_path, present_terminal_battle_app,
-    read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
-    render_terminal_battle, save_battle_artifacts, AnalyzeOptions, JudgeMode,
+    analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
+    present_terminal_battle_app, read_clipboard_text, regenerate_battle_report,
+    render_open_summary, render_report_summary, render_terminal_battle, save_battle_artifacts,
+    AnalyzeOptions, BattleResult, JudgeMode,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -155,6 +156,7 @@ struct SessionState {
     out_dir: PathBuf,
     last_json: Option<PathBuf>,
     last_html: Option<PathBuf>,
+    last_result: Option<BattleResult>,
 }
 
 impl SessionState {
@@ -170,6 +172,7 @@ impl SessionState {
             out_dir: default_reports_dir(),
             last_json: None,
             last_html: None,
+            last_result: None,
         }
     }
 }
@@ -342,20 +345,94 @@ fn render_start_screen(state: &SessionState) {
     println!("  out    : {}", state.out_dir.display());
     println!();
     println!("Actions");
-    println!("  1  set left input");
-    println!("  2  set right input");
-    println!("  3  set labels");
-    println!("  4  toggle judge mode");
-    println!("  5  set OpenAI model");
-    println!("  6  paste both from clipboard");
-    println!("  7  run battle");
-    println!("  8  rematch last pair");
-    println!("  9  open latest report");
+    println!("  1  start battle");
+    println!("  2  rematch last pair");
+    println!("  3  share latest result");
+    println!("  4  settings");
+    println!("  5  open latest report");
     if !state.app_state.star_acknowledged {
         println!("  s  open GitHub star page and hide reminder");
     }
     println!("  q  quit");
     println!();
+}
+
+fn run_settings_menu(state: &mut SessionState) -> Result<()> {
+    loop {
+        clear_screen();
+        println!("Settings");
+        println!("  judge : {}", judge_label(&state.judge));
+        println!("  model : {}", state.model);
+        println!("  left label  : {}", state.left_label.as_deref().unwrap_or("(empty)"));
+        println!("  right label : {}", state.right_label.as_deref().unwrap_or("(empty)"));
+        println!("  out dir     : {}", state.out_dir.display());
+        println!();
+        println!("  1  toggle judge");
+        println!("  2  set model");
+        println!("  3  set labels");
+        println!("  4  paste both from clipboard");
+        println!("  5  set output dir");
+        println!("  b  back");
+        let action = prompt_line("Settings > ")?;
+        match action.as_str() {
+            "1" => state.judge = cycle_judge(&state.judge),
+            "2" => { if let Some(model) = prompt_optional("OpenAI model > ")? { state.model = model; } }
+            "3" => {
+                state.left_label = prompt_optional("Left label (optional) > ")?;
+                state.right_label = prompt_optional("Right label (optional) > ")?;
+            }
+            "4" => {
+                let clip = read_clipboard_text()?;
+                let parts: Vec<String> = clip.replace('\r', "").split('\n').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect();
+                if parts.len() >= 2 {
+                    state.left = Some(parts[0].clone());
+                    state.right = Some(parts[1].clone());
+                }
+            }
+            "5" => { if let Some(out) = prompt_optional("Output dir > ")? { state.out_dir = PathBuf::from(out); } }
+            "b" => return Ok(()),
+            _ => {}
+        }
+    }
+}
+
+fn run_share_menu(state: &mut SessionState) -> Result<()> {
+    let Some(result) = state.last_result.as_ref() else {
+        println!("No latest result to share. Press Enter to continue.");
+        let _ = prompt_line("")?;
+        return Ok(());
+    };
+    let bundle = generate_share_bundle(result, &state.out_dir)?;
+    loop {
+        clear_screen();
+        println!("Share Latest Result");
+        println!("Share pack: {}", bundle.directory);
+        println!();
+        for (index, asset) in bundle.assets.iter().enumerate() {
+            println!("  {}  {}", index + 1, asset.platform);
+            println!("     image: {}", asset.image_path);
+            println!("     note : {}", asset.note);
+        }
+        println!("  o  open share folder");
+        println!("  b  back");
+        let action = prompt_line("Share > ")?;
+        if action == "b" {
+            return Ok(());
+        }
+        if action == "o" {
+            open_path(PathBuf::from(&bundle.directory).as_path())?;
+            continue;
+        }
+        if let Ok(index) = action.parse::<usize>() {
+            if let Some(asset) = bundle.assets.get(index - 1) {
+                if let Some(url) = &asset.open_url {
+                    let _ = Command::new("open").arg(url).status();
+                } else {
+                    open_path(PathBuf::from(&asset.image_path).as_path())?;
+                }
+            }
+        }
+    }
 }
 
 async fn run_interactive_app() -> Result<()> {
@@ -366,30 +443,7 @@ async fn run_interactive_app() -> Result<()> {
         render_start_screen(&state);
         let action = prompt_line("Select action > ")?;
         match action.as_str() {
-            "1" => state.left = prompt_optional("Left path/URL/data URL > ")?,
-            "2" => state.right = prompt_optional("Right path/URL/data URL > ")?,
-            "3" => {
-                state.left_label = prompt_optional("Left label (optional) > ")?;
-                state.right_label = prompt_optional("Right label (optional) > ")?;
-            }
-            "4" => state.judge = cycle_judge(&state.judge),
-            "5" => {
-                if let Some(model) = prompt_optional("OpenAI model > ")? {
-                    state.model = model;
-                }
-            }
-            "6" => {
-                let clip = read_clipboard_text()?;
-                let parts: Vec<String> = clip.replace('\r', "").split('\n').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect();
-                if parts.len() >= 2 {
-                    state.left = Some(parts[0].clone());
-                    state.right = Some(parts[1].clone());
-                } else {
-                    println!("Clipboard needs two non-empty lines. Press Enter to continue.");
-                    let _ = prompt_line("")?;
-                }
-            }
-            "7" => {
+            "1" => {
                 let left = state.left.clone().or(prompt_optional("Left path/URL/data URL > ")?).ok_or_else(|| anyhow::anyhow!("Left input required"))?;
                 let right = state.right.clone().or(prompt_optional("Right path/URL/data URL > ")?).ok_or_else(|| anyhow::anyhow!("Right input required"))?;
                 state.left = Some(left.clone());
@@ -412,9 +466,10 @@ async fn run_interactive_app() -> Result<()> {
                 let (result, artifacts) = battle_from_args(args).await?;
                 state.last_json = Some(PathBuf::from(&artifacts.json_path));
                 state.last_html = Some(PathBuf::from(&artifacts.html_path));
+                state.last_result = Some(result.clone());
                 present_terminal_battle_app(&result, &artifacts, None)?;
             }
-            "8" => {
+            "2" => {
                 if let Some((left, right)) = last_pair.clone() {
                     let args = BattleArgs {
                         left: Some(left),
@@ -433,13 +488,20 @@ async fn run_interactive_app() -> Result<()> {
                     let (result, artifacts) = battle_from_args(args).await?;
                     state.last_json = Some(PathBuf::from(&artifacts.json_path));
                     state.last_html = Some(PathBuf::from(&artifacts.html_path));
+                    state.last_result = Some(result.clone());
                     present_terminal_battle_app(&result, &artifacts, None)?;
                 } else {
                     println!("No previous pair. Press Enter to continue.");
                     let _ = prompt_line("")?;
                 }
             }
-            "9" => {
+            "3" => {
+                run_share_menu(&mut state)?;
+            }
+            "4" => {
+                run_settings_menu(&mut state)?;
+            }
+            "5" => {
                 let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
                 open_path(&path)?;
                 println!("{}", render_open_summary(&path, io::stdout().is_terminal()));
