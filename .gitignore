@@ -4,3 +4,5 @@ reports/*.json
 coverage
 .DS_Store
 packages/core/test/tmp-artifacts/
+target/
+Cargo.lock
