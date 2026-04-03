@@ -1233,10 +1233,10 @@ pub fn render_report_summary(report: &SavedArtifacts, color: bool) -> String {
 
 fn write_tui_screen(stdout: &mut io::Stdout, screen: &str) -> Result<()> {
     execute!(stdout, cursor::MoveTo(0, 0))?;
-    let normalized = screen.replace("
-", "
-");
-    stdout.write_all(normalized.as_bytes())?;
+    for (row, line) in screen.lines().enumerate() {
+        execute!(stdout, cursor::MoveTo(0, row as u16))?;
+        write!(stdout, "{}", line)?;
+    }
     stdout.flush()?;
     Ok(())
 }

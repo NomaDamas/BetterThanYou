@@ -332,10 +332,10 @@ fn render_menu_screen(title: &str, subtitle: &[String], items: &[String], select
 
 fn write_menu_screen(stdout: &mut io::Stdout, screen: &str) -> Result<()> {
     execute!(stdout, cursor::MoveTo(0, 0), Clear(ClearType::All))?;
-    let normalized = screen.replace("
-", "
-");
-    stdout.write_all(normalized.as_bytes())?;
+    for (row, line) in screen.lines().enumerate() {
+        execute!(stdout, cursor::MoveTo(0, row as u16))?;
+        write!(stdout, "{}", line)?;
+    }
     stdout.flush()?;
     Ok(())
 }
