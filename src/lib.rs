@@ -1230,6 +1230,16 @@ pub fn render_report_summary(report: &SavedArtifacts, color: bool) -> String {
     lines.join("\n")
 }
 
+
+fn write_tui_screen(stdout: &mut io::Stdout, screen: &str) -> Result<()> {
+    execute!(stdout, cursor::MoveTo(0, 0))?;
+    stdout.write_all(screen.replace("
+", "
+").as_bytes())?;
+    stdout.flush()?;
+    Ok(())
+}
+
 pub fn render_open_summary(path: &Path, color: bool) -> String {
     paint(&format!("Opened: {}", path.display()), ANSI_DIM, color)
 }
@@ -1244,9 +1254,8 @@ pub fn present_terminal_battle_app(result: &BattleResult, artifacts: &SavedArtif
 
     enable_raw_mode()?;
     execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
-    writeln!(stdout, "{}", render_terminal_battle(result, artifacts, true))?;
-    writeln!(stdout, "{}", paint("Keys: [o] open report  [q] quit", ANSI_DIM, true))?;
-    stdout.flush()?;
+    let screen = format!("{}\n{}", render_terminal_battle(result, artifacts, true), paint("Keys: [o] open report  [q] quit", ANSI_DIM, true));
+    write_tui_screen(&mut stdout, &screen)?;
 
     loop {
         if let Event::Key(key) = event::read()? {

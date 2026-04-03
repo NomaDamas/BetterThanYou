@@ -276,23 +276,8 @@ fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index
     execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
 
     loop {
-        execute!(stdout, cursor::MoveTo(0, 0), Clear(ClearType::All))?;
-        writeln!(stdout, "{}", title)?;
-        writeln!(stdout)?;
-        for line in subtitle {
-            writeln!(stdout, "{}", line)?;
-        }
-        if !subtitle.is_empty() {
-            writeln!(stdout)?;
-        }
-        for (index, item) in items.iter().enumerate() {
-            if index == selected {
-                writeln!(stdout, "  › {}", item)?;
-            } else {
-                writeln!(stdout, "    {}", item)?;
-            }
-        }
-        stdout.flush()?;
+        let screen = render_menu_screen(title, subtitle, items, selected);
+        write_menu_screen(&mut stdout, &screen)?;
 
         if let Event::Key(key) = event::read()? {
             if key.kind != KeyEventKind::Press {
@@ -323,6 +308,35 @@ fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index
     disable_raw_mode()?;
     execute!(stdout, LeaveAlternateScreen, cursor::Show)?;
     Ok(Some(selected))
+}
+
+
+fn render_menu_screen(title: &str, subtitle: &[String], items: &[String], selected: usize) -> String {
+    let mut lines = Vec::new();
+    lines.push(title.to_string());
+    lines.push(String::new());
+    lines.extend(subtitle.iter().cloned());
+    if !subtitle.is_empty() {
+        lines.push(String::new());
+    }
+    for (index, item) in items.iter().enumerate() {
+        if index == selected {
+            lines.push(format!("  › {}", item));
+        } else {
+            lines.push(format!("    {}", item));
+        }
+    }
+    lines.join("
+")
+}
+
+fn write_menu_screen(stdout: &mut io::Stdout, screen: &str) -> Result<()> {
+    execute!(stdout, cursor::MoveTo(0, 0), Clear(ClearType::All))?;
+    stdout.write_all(screen.replace("
+", "
+").as_bytes())?;
+    stdout.flush()?;
+    Ok(())
 }
 
 fn judge_index(judge: &JudgeCli) -> usize {
