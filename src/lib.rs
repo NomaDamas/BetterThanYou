@@ -880,6 +880,12 @@ pub fn open_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn write_clipboard_text(text: &str) -> Result<()> {
+    let mut clipboard = arboard::Clipboard::new()?;
+    clipboard.set_text(text.to_string())?;
+    Ok(())
+}
+
 pub fn read_clipboard_text() -> Result<String> {
     let mut clipboard = arboard::Clipboard::new()?;
     Ok(clipboard.get_text()?)

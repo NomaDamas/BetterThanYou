@@ -1,19 +1,23 @@
 use std::fs;
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{bail, Result};
-use serde::{Deserialize, Serialize};
+use anyhow::{anyhow, bail, Result};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
     present_terminal_battle_app, read_clipboard_text, regenerate_battle_report,
     render_open_summary, render_report_summary, render_terminal_battle, save_battle_artifacts,
-    AnalyzeOptions, BattleResult, JudgeMode,
+    write_clipboard_text, AnalyzeOptions, BattleResult, JudgeMode,
 };
 use clap::{Parser, Subcommand, ValueEnum};
+use crossterm::cursor;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::execute;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug, ValueEnum, Serialize, Deserialize)]
 enum JudgeCli {
     Auto,
     Heuristic,
@@ -26,6 +30,16 @@ impl From<JudgeCli> for JudgeMode {
             JudgeCli::Auto => JudgeMode::Auto,
             JudgeCli::Heuristic => JudgeMode::Heuristic,
             JudgeCli::Openai => JudgeMode::Openai,
+        }
+    }
+}
+
+impl JudgeCli {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Heuristic => "heuristic",
+            Self::Openai => "openai",
         }
     }
 }
@@ -112,10 +126,49 @@ struct OpenArgs {
     out_dir: Option<PathBuf>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct AppState {
     star_acknowledged: bool,
+    openai_api_key: Option<String>,
+    judge: Option<JudgeCli>,
+    model: Option<String>,
+    out_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+struct SessionState {
+    app_state: AppState,
+    left: Option<String>,
+    right: Option<String>,
+    left_label: Option<String>,
+    right_label: Option<String>,
+    judge: JudgeCli,
+    model: String,
+    out_dir: PathBuf,
+    last_json: Option<PathBuf>,
+    last_html: Option<PathBuf>,
+    last_result: Option<BattleResult>,
+    last_pair: Option<(String, String)>,
+}
+
+impl SessionState {
+    fn new() -> Self {
+        let app_state = load_app_state();
+        Self {
+            judge: app_state.judge.clone().unwrap_or(JudgeCli::Auto),
+            model: app_state.model.clone().unwrap_or_else(|| "gpt-4.1-mini".to_string()),
+            out_dir: app_state.out_dir.clone().unwrap_or_else(default_reports_dir),
+            app_state,
+            left: None,
+            right: None,
+            left_label: None,
+            right_label: None,
+            last_json: None,
+            last_html: None,
+            last_result: None,
+            last_pair: None,
+        }
+    }
 }
 
 fn app_state_path() -> Option<PathBuf> {
@@ -138,52 +191,13 @@ fn save_app_state(state: &AppState) -> Result<()> {
     Ok(())
 }
 
-fn maybe_print_star_reminder(state: &AppState) {
-    if !state.star_acknowledged {
-        eprintln!("Support BetterThanYou by starring https://github.com/NomaDamas/BetterThanYou . Run the app and press 's' to open the star page and hide this reminder.");
-    }
-}
-
-#[derive(Debug, Clone)]
-struct SessionState {
-    app_state: AppState,
-    left: Option<String>,
-    right: Option<String>,
-    left_label: Option<String>,
-    right_label: Option<String>,
-    judge: JudgeCli,
-    model: String,
-    out_dir: PathBuf,
-    last_json: Option<PathBuf>,
-    last_html: Option<PathBuf>,
-    last_result: Option<BattleResult>,
-}
-
-impl SessionState {
-    fn new() -> Self {
-        Self {
-            app_state: load_app_state(),
-            left: None,
-            right: None,
-            left_label: None,
-            right_label: None,
-            judge: JudgeCli::Auto,
-            model: "gpt-4.1-mini".to_string(),
-            out_dir: default_reports_dir(),
-            last_json: None,
-            last_html: None,
-            last_result: None,
-        }
-    }
-}
-
 fn normalize_input(value: String) -> String {
     value.trim().to_string()
 }
 
 fn prompt_line(prompt: &str) -> Result<String> {
     print!("{}", prompt);
-    io::Write::flush(&mut io::stdout())?;
+    io::stdout().flush()?;
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
     Ok(normalize_input(input))
@@ -204,27 +218,6 @@ fn read_piped_lines() -> Result<Vec<String>> {
         .filter(|line| !line.is_empty())
         .map(str::to_string)
         .collect())
-}
-
-fn clear_screen() {
-    print!("\u{1b}[2J\u{1b}[H");
-    let _ = io::Write::flush(&mut io::stdout());
-}
-
-fn judge_label(judge: &JudgeCli) -> &'static str {
-    match judge {
-        JudgeCli::Auto => "auto",
-        JudgeCli::Heuristic => "heuristic",
-        JudgeCli::Openai => "openai",
-    }
-}
-
-fn cycle_judge(judge: &JudgeCli) -> JudgeCli {
-    match judge {
-        JudgeCli::Auto => JudgeCli::Heuristic,
-        JudgeCli::Heuristic => JudgeCli::Openai,
-        JudgeCli::Openai => JudgeCli::Auto,
-    }
 }
 
 fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: bool, right_clipboard: bool) -> Result<(String, String)> {
@@ -265,15 +258,124 @@ fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: 
     }
 }
 
-async fn battle_from_args(args: BattleArgs) -> Result<(better_than_you::BattleResult, better_than_you::SavedArtifacts)> {
-    let (left_source, right_source) = resolve_sources(args.left, args.right, args.left_clipboard, args.right_clipboard)?;
-    let output_dir = args.out_dir.unwrap_or_else(default_reports_dir);
+fn maybe_print_star_reminder(state: &AppState) {
+    if !state.star_acknowledged {
+        eprintln!("Support BetterThanYou by starring https://github.com/NomaDamas/BetterThanYou . Run better-than-you with no args and press 's' to open the star page and hide this reminder.");
+    }
+}
+
+fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index: usize) -> Result<Option<usize>> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Ok(Some(initial_index.min(items.len().saturating_sub(1))));
+    }
+
+    let mut stdout = io::stdout();
+    let mut selected = initial_index.min(items.len().saturating_sub(1));
+
+    enable_raw_mode()?;
+    execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
+
+    loop {
+        execute!(stdout, cursor::MoveTo(0, 0), Clear(ClearType::All))?;
+        writeln!(stdout, "{}", title)?;
+        writeln!(stdout)?;
+        for line in subtitle {
+            writeln!(stdout, "{}", line)?;
+        }
+        if !subtitle.is_empty() {
+            writeln!(stdout)?;
+        }
+        for (index, item) in items.iter().enumerate() {
+            if index == selected {
+                writeln!(stdout, "  › {}", item)?;
+            } else {
+                writeln!(stdout, "    {}", item)?;
+            }
+        }
+        stdout.flush()?;
+
+        if let Event::Key(key) = event::read()? {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            match key.code {
+                KeyCode::Up => {
+                    selected = selected.saturating_sub(1);
+                }
+                KeyCode::Down => {
+                    if selected + 1 < items.len() {
+                        selected += 1;
+                    }
+                }
+                KeyCode::Enter => {
+                    break;
+                }
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    disable_raw_mode()?;
+                    execute!(stdout, LeaveAlternateScreen, cursor::Show)?;
+                    return Ok(None);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    disable_raw_mode()?;
+    execute!(stdout, LeaveAlternateScreen, cursor::Show)?;
+    Ok(Some(selected))
+}
+
+fn judge_index(judge: &JudgeCli) -> usize {
+    match judge {
+        JudgeCli::Auto => 0,
+        JudgeCli::Openai => 1,
+        JudgeCli::Heuristic => 2,
+    }
+}
+
+fn ensure_openai_ready(state: &mut SessionState) -> Result<()> {
+    if state.app_state.openai_api_key.is_some() || std::env::var("OPENAI_API_KEY").is_ok() {
+        return Ok(());
+    }
+
+    let subtitle = vec![
+        "OpenAI judge needs an API key.".to_string(),
+        "Choose how to continue.".to_string(),
+    ];
+    let items = vec![
+        "Enter API key now".to_string(),
+        "Switch judge to auto".to_string(),
+        "Switch judge to heuristic".to_string(),
+        "Cancel".to_string(),
+    ];
+
+    match select_menu("OpenAI Key Required", &subtitle, &items, 0)? {
+        Some(0) => {
+            if let Some(key) = prompt_optional("OpenAI API key > ")? {
+                state.app_state.openai_api_key = Some(key);
+                save_app_state(&state.app_state)?;
+            }
+        }
+        Some(1) => state.judge = JudgeCli::Auto,
+        Some(2) => state.judge = JudgeCli::Heuristic,
+        _ => bail!("OpenAI key entry cancelled."),
+    }
+
+    Ok(())
+}
+
+async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Result<(BattleResult, better_than_you::SavedArtifacts)> {
+    let (left_source, right_source) = resolve_sources(args.left.clone(), args.right.clone(), args.left_clipboard, args.right_clipboard)?;
+    let output_dir = args.out_dir.clone().unwrap_or_else(default_reports_dir);
 
     let mut options = AnalyzeOptions::new(left_source, right_source);
-    options.left_label = args.left_label;
-    options.right_label = args.right_label;
+    options.left_label = args.left_label.clone();
+    options.right_label = args.right_label.clone();
     options.judge_mode = args.judge.clone().into();
-    options.openai_model = args.model;
+    options.openai_model = args.model.clone();
+    if let Some(session_state) = state {
+        options.openai_config.api_key = session_state.app_state.openai_api_key.clone();
+    }
 
     let result = analyze_portrait_battle(options).await?;
     let artifacts = save_battle_artifacts(&result, &output_dir)?;
@@ -281,7 +383,7 @@ async fn battle_from_args(args: BattleArgs) -> Result<(better_than_you::BattleRe
 }
 
 async fn run_battle(args: BattleArgs) -> Result<()> {
-    let (result, artifacts) = battle_from_args(args.clone()).await?;
+    let (result, artifacts) = battle_from_args(&args, None).await?;
 
     if args.open {
         open_path(PathBuf::from(&artifacts.html_path).as_path())?;
@@ -333,55 +435,60 @@ fn run_open(args: OpenArgs) -> Result<()> {
     Ok(())
 }
 
-fn render_start_screen(state: &SessionState) {
-    clear_screen();
-    println!("BetterThanYou // CLI Portrait Battle");
-    println!();
-    println!("Current inputs");
-    println!("  left   : {}", state.left.as_deref().unwrap_or("(empty)"));
-    println!("  right  : {}", state.right.as_deref().unwrap_or("(empty)"));
-    println!("  judge  : {}", judge_label(&state.judge));
-    println!("  model  : {}", state.model);
-    println!("  out    : {}", state.out_dir.display());
-    println!();
-    println!("Actions");
-    println!("  1  start battle");
-    println!("  2  rematch last pair");
-    println!("  3  share latest result");
-    println!("  4  settings");
-    println!("  5  open latest report");
-    if !state.app_state.star_acknowledged {
-        println!("  s  open GitHub star page and hide reminder");
-    }
-    println!("  q  quit");
-    println!();
+fn render_start_subtitle(state: &SessionState) -> Vec<String> {
+    vec![
+        format!("Judge: {}", state.judge.as_str()),
+        format!("Model: {}", state.model),
+        format!("Left: {}", state.left.as_deref().unwrap_or("(not set)")),
+        format!("Right: {}", state.right.as_deref().unwrap_or("(not set)")),
+        format!("Output: {}", state.out_dir.display()),
+    ]
 }
 
 fn run_settings_menu(state: &mut SessionState) -> Result<()> {
     loop {
-        clear_screen();
-        println!("Settings");
-        println!("  judge : {}", judge_label(&state.judge));
-        println!("  model : {}", state.model);
-        println!("  left label  : {}", state.left_label.as_deref().unwrap_or("(empty)"));
-        println!("  right label : {}", state.right_label.as_deref().unwrap_or("(empty)"));
-        println!("  out dir     : {}", state.out_dir.display());
-        println!();
-        println!("  1  toggle judge");
-        println!("  2  set model");
-        println!("  3  set labels");
-        println!("  4  paste both from clipboard");
-        println!("  5  set output dir");
-        println!("  b  back");
-        let action = prompt_line("Settings > ")?;
-        match action.as_str() {
-            "1" => state.judge = cycle_judge(&state.judge),
-            "2" => { if let Some(model) = prompt_optional("OpenAI model > ")? { state.model = model; } }
-            "3" => {
+        let subtitle = vec![
+            format!("Current judge: {}", state.judge.as_str()),
+            format!("Current model: {}", state.model),
+        ];
+        let items = vec![
+            "Judge mode".to_string(),
+            "OpenAI model".to_string(),
+            "Labels".to_string(),
+            "Paste both from clipboard".to_string(),
+            "Output directory".to_string(),
+            "OpenAI API key".to_string(),
+            "Back".to_string(),
+        ];
+        match select_menu("Settings", &subtitle, &items, 0)? {
+            Some(0) => {
+                let judge_items = vec![
+                    "Auto (recommended)".to_string(),
+                    "OpenAI judge".to_string(),
+                    "Heuristic judge".to_string(),
+                ];
+                if let Some(choice) = select_menu("Judge Mode", &[], &judge_items, judge_index(&state.judge))? {
+                    state.judge = match choice {
+                        0 => JudgeCli::Auto,
+                        1 => JudgeCli::Openai,
+                        _ => JudgeCli::Heuristic,
+                    };
+                    state.app_state.judge = Some(state.judge.clone());
+                    save_app_state(&state.app_state)?;
+                }
+            }
+            Some(1) => {
+                if let Some(model) = prompt_optional("OpenAI model > ")? {
+                    state.model = model;
+                    state.app_state.model = Some(state.model.clone());
+                    save_app_state(&state.app_state)?;
+                }
+            }
+            Some(2) => {
                 state.left_label = prompt_optional("Left label (optional) > ")?;
                 state.right_label = prompt_optional("Right label (optional) > ")?;
             }
-            "4" => {
+            Some(3) => {
                 let clip = read_clipboard_text()?;
                 let parts: Vec<String> = clip.replace('\r', "").split('\n').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect();
                 if parts.len() >= 2 {
@@ -389,9 +496,34 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     state.right = Some(parts[1].clone());
                 }
             }
-            "5" => { if let Some(out) = prompt_optional("Output dir > ")? { state.out_dir = PathBuf::from(out); } }
-            "b" => return Ok(()),
-            _ => {}
+            Some(4) => {
+                if let Some(out) = prompt_optional("Output dir > ")? {
+                    state.out_dir = PathBuf::from(out);
+                    state.app_state.out_dir = Some(state.out_dir.clone());
+                    save_app_state(&state.app_state)?;
+                }
+            }
+            Some(5) => {
+                let items = vec![
+                    "Set API key".to_string(),
+                    "Clear saved API key".to_string(),
+                    "Back".to_string(),
+                ];
+                match select_menu("OpenAI API Key", &[], &items, 0)? {
+                    Some(0) => {
+                        if let Some(key) = prompt_optional("OpenAI API key > ")? {
+                            state.app_state.openai_api_key = Some(key);
+                            save_app_state(&state.app_state)?;
+                        }
+                    }
+                    Some(1) => {
+                        state.app_state.openai_api_key = None;
+                        save_app_state(&state.app_state)?;
+                    }
+                    _ => {}
+                }
+            }
+            _ => return Ok(()),
         }
     }
 }
@@ -404,51 +536,59 @@ fn run_share_menu(state: &mut SessionState) -> Result<()> {
     };
     let bundle = generate_share_bundle(result, &state.out_dir)?;
     loop {
-        clear_screen();
-        println!("Share Latest Result");
-        println!("Share pack: {}", bundle.directory);
-        println!();
-        for (index, asset) in bundle.assets.iter().enumerate() {
-            println!("  {}  {}", index + 1, asset.platform);
-            println!("     image: {}", asset.image_path);
-            println!("     note : {}", asset.note);
-        }
-        println!("  o  open share folder");
-        println!("  b  back");
-        let action = prompt_line("Share > ")?;
-        if action == "b" {
-            return Ok(());
-        }
-        if action == "o" {
-            open_path(PathBuf::from(&bundle.directory).as_path())?;
-            continue;
-        }
-        if let Ok(index) = action.parse::<usize>() {
-            if let Some(asset) = bundle.assets.get(index - 1) {
+        let subtitle = vec![
+            format!("Share folder: {}", bundle.directory),
+            "Choosing a platform copies the caption to clipboard first.".to_string(),
+        ];
+        let mut items = bundle.assets.iter().map(|asset| asset.platform.clone()).collect::<Vec<_>>();
+        items.push("Open share folder".to_string());
+        items.push("Back".to_string());
+
+        match select_menu("Share Latest Result", &subtitle, &items, 0)? {
+            Some(index) if index < bundle.assets.len() => {
+                let asset = &bundle.assets[index];
+                let _ = write_clipboard_text(&asset.caption);
                 if let Some(url) = &asset.open_url {
                     let _ = Command::new("open").arg(url).status();
                 } else {
                     open_path(PathBuf::from(&asset.image_path).as_path())?;
                 }
             }
+            Some(index) if index == bundle.assets.len() => {
+                open_path(PathBuf::from(&bundle.directory).as_path())?;
+            }
+            _ => return Ok(()),
         }
     }
 }
 
 async fn run_interactive_app() -> Result<()> {
     let mut state = SessionState::new();
-    let mut last_pair: Option<(String, String)> = None;
 
     loop {
-        render_start_screen(&state);
-        let action = prompt_line("Select action > ")?;
-        match action.as_str() {
-            "1" => {
-                let left = state.left.clone().or(prompt_optional("Left path/URL/data URL > ")?).ok_or_else(|| anyhow::anyhow!("Left input required"))?;
-                let right = state.right.clone().or(prompt_optional("Right path/URL/data URL > ")?).ok_or_else(|| anyhow::anyhow!("Right input required"))?;
+        let mut items = vec![
+            "Start New Battle".to_string(),
+            "Rematch Last Pair".to_string(),
+            "Share Latest Result".to_string(),
+            "Open Latest Report".to_string(),
+            "Settings".to_string(),
+        ];
+        if !state.app_state.star_acknowledged {
+            items.push("Star BetterThanYou on GitHub".to_string());
+        }
+        items.push("Quit".to_string());
+
+        let subtitle = render_start_subtitle(&state);
+        match select_menu("BetterThanYou", &subtitle, &items, 0)? {
+            Some(0) => {
+                let left = state.left.clone().or(prompt_optional("Left path/URL/data URL > ")?).ok_or_else(|| anyhow!("Left input required"))?;
+                let right = state.right.clone().or(prompt_optional("Right path/URL/data URL > ")?).ok_or_else(|| anyhow!("Right input required"))?;
                 state.left = Some(left.clone());
                 state.right = Some(right.clone());
-                last_pair = Some((left.clone(), right.clone()));
+                state.last_pair = Some((left.clone(), right.clone()));
+                if matches!(state.judge, JudgeCli::Openai) {
+                    ensure_openai_ready(&mut state)?;
+                }
                 let args = BattleArgs {
                     left: Some(left),
                     right: Some(right),
@@ -463,14 +603,14 @@ async fn run_interactive_app() -> Result<()> {
                     open: false,
                     no_app: false,
                 };
-                let (result, artifacts) = battle_from_args(args).await?;
+                let (result, artifacts) = battle_from_args(&args, Some(&state)).await?;
                 state.last_json = Some(PathBuf::from(&artifacts.json_path));
                 state.last_html = Some(PathBuf::from(&artifacts.html_path));
                 state.last_result = Some(result.clone());
                 present_terminal_battle_app(&result, &artifacts, None)?;
             }
-            "2" => {
-                if let Some((left, right)) = last_pair.clone() {
+            Some(1) => {
+                if let Some((left, right)) = state.last_pair.clone() {
                     let args = BattleArgs {
                         left: Some(left),
                         right: Some(right),
@@ -485,7 +625,7 @@ async fn run_interactive_app() -> Result<()> {
                         open: false,
                         no_app: false,
                     };
-                    let (result, artifacts) = battle_from_args(args).await?;
+                    let (result, artifacts) = battle_from_args(&args, Some(&state)).await?;
                     state.last_json = Some(PathBuf::from(&artifacts.json_path));
                     state.last_html = Some(PathBuf::from(&artifacts.html_path));
                     state.last_result = Some(result.clone());
@@ -495,31 +635,21 @@ async fn run_interactive_app() -> Result<()> {
                     let _ = prompt_line("")?;
                 }
             }
-            "3" => {
-                run_share_menu(&mut state)?;
-            }
-            "4" => {
-                run_settings_menu(&mut state)?;
-            }
-            "5" => {
+            Some(2) => run_share_menu(&mut state)?,
+            Some(3) => {
                 let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
                 open_path(&path)?;
                 println!("{}", render_open_summary(&path, io::stdout().is_terminal()));
                 let _ = prompt_line("Press Enter to continue > ")?;
             }
-            "s" => {
+            Some(4) => run_settings_menu(&mut state)?,
+            Some(5) if !state.app_state.star_acknowledged => {
                 let star_url = "https://github.com/NomaDamas/BetterThanYou";
-                if open_path(PathBuf::from(star_url).as_path()).is_err() {
-                    let _ = Command::new("open").arg(star_url).status();
-                }
+                let _ = Command::new("open").arg(star_url).status();
                 state.app_state.star_acknowledged = true;
                 save_app_state(&state.app_state)?;
             }
-            "q" | "quit" | "exit" => break,
-            _ => {
-                println!("Unknown action. Press Enter to continue.");
-                let _ = prompt_line("")?;
-            }
+            _ => break,
         }
     }
 
