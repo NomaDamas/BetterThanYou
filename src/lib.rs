@@ -811,36 +811,156 @@ pub async fn analyze_portrait_battle(options: AnalyzeOptions) -> Result<BattleRe
 }
 
 pub fn render_html_report(result: &BattleResult) -> String {
-    let mut axis_cards = String::new();
-    for card in &result.axis_cards {
-        let _ = write!(axis_cards, r#"<article class=\"axis-card\"><header><span>{}</span><strong>{:.1} pt gap</strong></header><div class=\"axis-values\"><div><small>{}</small><b>{:.1}</b></div><div><small>{}</small><b>{:.1}</b></div></div></article>"#, card.label, card.diff, result.inputs.left.label, card.left, result.inputs.right.label, card.right);
-    }
+    let axis_cards = result
+        .axis_cards
+        .iter()
+        .map(|card| {
+            format!(
+                r#"<article class="axis-card"><header><span>{}</span><strong>{:.1} pt gap</strong></header><div class="axis-values"><div><small>{}</small><b>{:.1}</b></div><div><small>{}</small><b>{:.1}</b></div></div></article>"#,
+                card.label,
+                card.diff,
+                result.inputs.left.label,
+                card.left,
+                result.inputs.right.label,
+                card.right,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
 
-    format!(r#"<!doctype html>
-<html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>{} • {} vs {}</title><style>:root{{--bg:#0d0f14;--panel:rgba(18,23,34,0.82);--line:rgba(255,255,255,0.1);--text:#f5efe4;--muted:#c7b9a5;--accent:#ff8c42;}}*{{box-sizing:border-box}}body{{margin:0;min-height:100vh;background:linear-gradient(140deg,#090b10 0%,#111722 55%,#0f1116 100%);color:var(--text);font-family:Avenir Next,Trebuchet MS,Segoe UI,sans-serif}}.shell{{width:min(1180px,calc(100vw - 32px));margin:0 auto;padding:28px 0 72px}}.hero,.score-panel,.axis-card,.narrative-block,.input-card{{border:1px solid var(--line);border-radius:24px;background:var(--panel)}}.hero{{padding:28px}}.winner-pill{{display:inline-flex;padding:10px 16px;border-radius:999px;background:rgba(255,207,90,0.14);color:#ffcf5a}}.winner-row h1{{font-size:clamp(38px,7vw,84px);margin:0}}.totals,.inputs,.axis-grid,.narrative-grid{{display:grid;gap:16px}}.totals{{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}.inputs{{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:24px}}.axis-grid,.narrative-grid{{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}}.score-panel,.axis-card,.narrative-block{{padding:18px}}.input-card img{{display:block;width:100%;aspect-ratio:4/5;object-fit:cover}}.input-copy{{padding:18px}} small{{color:var(--muted)}} p{{line-height:1.7;color:var(--muted)}}</style></head><body><main class=\"shell\"><section class=\"hero\"><div class=\"winner-pill\">Winner • {}</div><div class=\"winner-row\"><h1>{}</h1></div><p>{}</p><div class=\"totals\"><article class=\"score-panel\"><small>{}</small><strong>{:.1}</strong></article><article class=\"score-panel\"><small>{}</small><strong>{:.1}</strong></article><article class=\"score-panel\"><small>Judge</small><strong>{}</strong></article></div></section><section class=\"inputs\"><article class=\"input-card\"><img alt=\"{}\" src=\"{}\" /><div class=\"input-copy\"><h2>{}</h2><p>{}</p></div></article><article class=\"input-card\"><img alt=\"{}\" src=\"{}\" /><div class=\"input-copy\"><h2>{}</h2><p>{}</p></div></article></section><section><div class=\"axis-grid\">{}</div></section><section><div class=\"narrative-grid\"><section class=\"narrative-block\"><h3>Overall Take</h3><p>{}</p></section><section class=\"narrative-block\"><h3>Why This Won</h3><p>{}</p></section><section class=\"narrative-block\"><h3>Model Jury Notes</h3><p>{}</p></section></div></section></main></body></html>"#,
-        PRODUCT_NAME,
-        result.inputs.left.label,
-        result.inputs.right.label,
-        result.winner.label,
-        result.winner.label,
-        result.sections.overall_take,
-        result.inputs.left.label,
-        result.scores.left.total,
-        result.inputs.right.label,
-        result.scores.right.total,
-        result.engine.model.clone().unwrap_or_else(|| result.engine.judge_mode.clone()),
-        result.inputs.left.label,
-        result.inputs.left.image_data_url,
-        result.inputs.left.label,
-        result.sections.strengths.left,
-        result.inputs.right.label,
-        result.inputs.right.image_data_url,
-        result.inputs.right.label,
-        result.sections.strengths.right,
-        axis_cards,
-        result.sections.overall_take,
-        result.sections.why_this_won,
-        result.sections.model_jury_notes,
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{product} • {left} vs {right}</title>
+    <style>
+      :root {{
+        --bg: #0a0d13;
+        --panel: rgba(17, 23, 34, 0.88);
+        --line: rgba(255, 255, 255, 0.09);
+        --text: #f5efe4;
+        --muted: #c7b9a5;
+        --accent: #ff8f42;
+        --accent-2: #63ebd3;
+        --winner: #ffd36b;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(255,143,66,0.24), transparent 36%),
+          radial-gradient(circle at right center, rgba(99,235,211,0.14), transparent 28%),
+          linear-gradient(145deg, #090b10 0%, #121824 100%);
+      }}
+      .shell {{
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }}
+      .hero, .score-panel, .axis-card, .narrative-block, .input-card {{
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+      }}
+      .hero {{ padding: 28px; box-shadow: 0 24px 70px rgba(0,0,0,0.35); }}
+      .eyebrow {{ text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: var(--muted); }}
+      .winner-pill {{
+        display: inline-flex;
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(255, 211, 107, 0.12);
+        color: var(--winner);
+        margin-bottom: 12px;
+      }}
+      h1 {{ margin: 0; font-size: clamp(42px, 7vw, 88px); line-height: 0.92; text-transform: uppercase; }}
+      p {{ line-height: 1.7; color: var(--muted); }}
+      .totals, .inputs, .axis-grid, .narrative-grid {{ display: grid; gap: 16px; }}
+      .totals {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 18px; }}
+      .inputs {{ grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 22px; }}
+      .axis-grid, .narrative-grid {{ grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 18px; }}
+      .score-panel, .axis-card, .narrative-block {{ padding: 18px; }}
+      .score-panel strong {{ display: block; font-size: 40px; margin-top: 8px; color: var(--text); }}
+      .axis-card header, .axis-values {{ display: flex; justify-content: space-between; gap: 12px; }}
+      .axis-card header {{ margin-bottom: 14px; }}
+      .axis-values small, .score-panel small {{ color: var(--muted); display: block; }}
+      .input-card {{ overflow: hidden; }}
+      .input-card img {{ display: block; width: 100%; aspect-ratio: 4/5; object-fit: cover; }}
+      .input-copy {{ padding: 18px; }}
+      .input-copy h2, .narrative-block h3 {{ margin: 0 0 8px; }}
+      footer {{ margin-top: 22px; color: var(--muted); font-size: 14px; }}
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">winner first • {judge}</div>
+        <div class="winner-pill">Winner • {winner}</div>
+        <h1>{winner}</h1>
+        <p>{overall}</p>
+        <div class="totals">
+          <article class="score-panel"><small>{left}</small><strong>{left_total:.1}</strong></article>
+          <article class="score-panel"><small>{right}</small><strong>{right_total:.1}</strong></article>
+          <article class="score-panel"><small>Judge</small><strong>{judge}</strong></article>
+        </div>
+      </section>
+
+      <section class="inputs">
+        <article class="input-card">
+          <img alt="{left}" src="{left_src}" />
+          <div class="input-copy">
+            <h2>{left}</h2>
+            <p>{left_strength}</p>
+          </div>
+        </article>
+        <article class="input-card">
+          <img alt="{right}" src="{right_src}" />
+          <div class="input-copy">
+            <h2>{right}</h2>
+            <p>{right_strength}</p>
+          </div>
+        </article>
+      </section>
+
+      <section>
+        <div class="eyebrow">ability comparison</div>
+        <div class="axis-grid">{axis_cards}</div>
+      </section>
+
+      <section>
+        <div class="eyebrow">analysis</div>
+        <div class="narrative-grid">
+          <section class="narrative-block"><h3>Overall Take</h3><p>{overall}</p></section>
+          <section class="narrative-block"><h3>Why This Won</h3><p>{why}</p></section>
+          <section class="narrative-block"><h3>Model Jury Notes</h3><p>{notes}</p></section>
+        </div>
+      </section>
+
+      <footer>Generated {created_at} • {product}</footer>
+    </main>
+  </body>
+</html>"#,
+        product = PRODUCT_NAME,
+        left = result.inputs.left.label,
+        right = result.inputs.right.label,
+        winner = result.winner.label,
+        judge = result.engine.model.clone().unwrap_or_else(|| result.engine.judge_mode.clone()),
+        overall = result.sections.overall_take,
+        why = result.sections.why_this_won,
+        notes = result.sections.model_jury_notes,
+        left_total = result.scores.left.total,
+        right_total = result.scores.right.total,
+        left_src = result.inputs.left.image_data_url,
+        right_src = result.inputs.right.image_data_url,
+        left_strength = result.sections.strengths.left,
+        right_strength = result.sections.strengths.right,
+        created_at = result.created_at,
+        axis_cards = axis_cards,
     )
 }
 
