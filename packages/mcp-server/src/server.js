@@ -20,6 +20,8 @@ export function createMcpServer() {
       rightSource: z.string().min(1),
       leftLabel: z.string().optional(),
       rightLabel: z.string().optional(),
+      judgeMode: z.enum(["auto", "heuristic", "openai"]).optional(),
+      openAIModel: z.string().optional(),
       outputDir: z.string().optional()
     },
     async input => ({

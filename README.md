@@ -11,6 +11,7 @@ for non-developers and static report viewing.
 - Primary output: winner-first HUD with stat-by-stat comparison
 - Durable artifact: shareable static HTML report in `reports/`
 - Optional surfaces: web helper for non-devs, MCP for automation/agents
+- Judge modes: `auto`, `heuristic`, `openai`
 
 ## Install
 
@@ -40,16 +41,17 @@ better-than-you
 
 ### Homebrew formula path
 
-A formula is included in this repo now. You can install it from the checked-out
-repository like this:
+A working formula is included in this repo now. You can install it from a local
+Homebrew tap or after publishing a tap repository.
+
+Local tap verification flow:
 
 ```bash
-brew install --build-from-source ./Formula/better-than-you.rb
-better-than-you
+brew tap-new NomaDamas/better-than-you
+cp ./Formula/better-than-you.rb $(brew --repository)/Library/Taps/nomadamas/homebrew-better-than-you/Formula/better-than-you.rb
+brew reinstall NomaDamas/better-than-you/better-than-you
+better-than-you --help
 ```
-
-When this repo has stable release tarballs and checksums, the same formula can
-be promoted into a normal tap flow.
 
 ## Best CLI Flows
 
@@ -59,10 +61,18 @@ Direct drag-and-drop path flow:
 better-than-you /absolute/path/to/left.png /absolute/path/to/right.png
 ```
 
-Explicit battle mode:
+OpenAI VLM judge mode:
 
 ```bash
-better-than-you battle /absolute/path/to/left.png /absolute/path/to/right.png
+export OPENAI_API_KEY=your_key
+better-than-you /absolute/path/to/left.png /absolute/path/to/right.png --judge openai --model gpt-4.1-mini
+```
+
+Automatic mode will use OpenAI when a key is set, otherwise it falls back to the
+local heuristic engine:
+
+```bash
+better-than-you /absolute/path/to/left.png /absolute/path/to/right.png --judge auto
 ```
 
 Guided mode for drag-and-drop after launch:
@@ -77,7 +87,7 @@ and press Enter again.
 Clipboard-assisted flow on macOS:
 
 ```bash
-better-than-you battle --left-clipboard --right-clipboard
+better-than-you battle --left-clipboard --right-clipboard --judge openai
 ```
 
 Open the latest generated HTML report:
@@ -96,11 +106,28 @@ better-than-you report ./reports/latest-battle.json --open
 
 ```bash
 better-than-you battle <left> <right> [--left-label name] [--right-label name]
-better-than-you battle <left> <right> [--out-dir path] [--json] [--open]
+better-than-you battle <left> <right> [--judge auto|heuristic|openai] [--model name]
+better-than-you battle <left> <right> [--out-dir path] [--json] [--open] [--no-app]
 better-than-you battle --left-clipboard --right-clipboard
 better-than-you report <battle-json-path> [--out-dir path] [--open]
 better-than-you open [latest|path] [--out-dir path]
 ```
+
+## Judge Modes
+
+### Heuristic
+
+Local, deterministic, no API needed. Fast but not semantic.
+
+### OpenAI
+
+Uses the OpenAI Responses API with image input and structured JSON output to
+score both portraits on the same six axes and return a winner plus qualitative
+analysis. Default model is `gpt-4.1-mini`.
+
+Relevant official docs:
+- https://platform.openai.com/docs/guides/images-vision?api-mode=responses&format=file
+- https://platform.openai.com/docs/guides/structured-outputs?api-mode=responses&lang=python
 
 ## Product Surfaces
 

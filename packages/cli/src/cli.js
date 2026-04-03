@@ -2,6 +2,7 @@ import { createInterface } from "node:readline/promises";
 import { resolve } from "node:path";
 
 import {
+  DEFAULT_OPENAI_MODEL,
   analyzePortraitBattle,
   regenerateBattleReport,
   writeBattleArtifacts
@@ -14,6 +15,7 @@ import {
   readClipboardSource
 } from "./platform.js";
 import {
+  presentTerminalBattleApp,
   renderOpenSummary,
   renderReportSummary,
   renderTerminalBattle
@@ -38,13 +40,16 @@ Battle options:
   --out-dir <path>           Write HTML/JSON reports to a custom directory
   --left-clipboard           Read the left portrait source from the clipboard
   --right-clipboard          Read the right portrait source from the clipboard
+  --judge <mode>             auto, heuristic, or openai
+  --model <name>             Override the OpenAI model for judge=openai
   --json                     Print structured JSON to stdout instead of the battle HUD
   --open                     Open the generated HTML report after the battle
+  --no-app                   Disable the fullscreen-style result screen
 
 Notes:
   - Dragging files into the terminal usually pastes their absolute paths.
   - Running without arguments starts guided CLI mode.
-  - The web helper is optional; the CLI is the primary product surface.
+  - judge=auto uses OpenAI when OPENAI_API_KEY is set, otherwise falls back to heuristics.
 `;
 }
 
@@ -73,8 +78,11 @@ function parseOptions(rest) {
     rightLabel: undefined,
     leftClipboard: false,
     rightClipboard: false,
+    judgeMode: "auto",
+    openAIModel: DEFAULT_OPENAI_MODEL,
     json: false,
-    open: false
+    open: false,
+    noApp: false
   };
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -102,12 +110,26 @@ function parseOptions(rest) {
       parsed.rightClipboard = true;
       continue;
     }
+    if (value === "--judge") {
+      parsed.judgeMode = rest[index + 1] || parsed.judgeMode;
+      index += 1;
+      continue;
+    }
+    if (value === "--model") {
+      parsed.openAIModel = rest[index + 1] || parsed.openAIModel;
+      index += 1;
+      continue;
+    }
     if (value === "--json") {
       parsed.json = true;
       continue;
     }
     if (value === "--open") {
       parsed.open = true;
+      continue;
+    }
+    if (value === "--no-app") {
+      parsed.noApp = true;
       continue;
     }
     parsed.positional.push(value);
@@ -206,19 +228,38 @@ async function runBattle(rest, streams, env) {
     leftSource,
     rightSource,
     leftLabel: parsed.leftLabel,
-    rightLabel: parsed.rightLabel
+    rightLabel: parsed.rightLabel,
+    judgeMode: parsed.judgeMode,
+    openAIModel: parsed.openAIModel,
+    openAIConfig: {
+      apiKey: env.BTY_OPENAI_API_KEY || env.OPENAI_API_KEY,
+      baseUrl: env.OPENAI_BASE_URL
+    }
   });
 
   const artifacts = await writeBattleArtifacts(result, {
     outputDir
   });
 
-  if (parsed.open) {
+  const openReport = async () => {
     await openPathTarget(artifacts.htmlPath, env);
+  };
+
+  if (parsed.open) {
+    await openReport();
   }
 
   if (parsed.json) {
     streams.stdout.write(`${JSON.stringify({ result: stripEmbeddedImages(result), artifacts }, null, 2)}\n`);
+    return 0;
+  }
+
+  if (!parsed.noApp && streams.stdin?.isTTY && streams.stdout?.isTTY) {
+    await presentTerminalBattleApp(result, artifacts, {
+      stdin: streams.stdin,
+      stdout: streams.stdout,
+      onOpenReport: openReport
+    });
     return 0;
   }
 

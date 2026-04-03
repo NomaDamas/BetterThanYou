@@ -1,3 +1,5 @@
+import readline from "node:readline";
+
 const ANSI = {
   reset: "\u001b[0m",
   bold: "\u001b[1m",
@@ -55,9 +57,13 @@ export function renderTerminalBattle(result, artifacts, options = {}) {
   const width = 84;
   const winnerColor = result.winner.id === "left" ? ANSI.amber : ANSI.blue;
   const winnerBanner = boxedTitle(`WINNER // ${result.winner.label.toUpperCase()}`, winnerColor, width, color);
+  const judgeLine = result.engine.model
+    ? `JUDGE  ${result.engine.judgeMode} via ${result.engine.model}`
+    : `JUDGE  ${result.engine.judgeMode}`;
 
   lines.push(...boxedTitle("BETTERTHANYOU // CLI PORTRAIT BATTLE", ANSI.bold, width, color));
   lines.push(...winnerBanner);
+  lines.push(paint(judgeLine, ANSI.dim, color));
   lines.push(paint(`TOTAL   ${result.inputs.left.label} ${result.scores.left.total.toFixed(1)}  vs  ${result.inputs.right.label} ${result.scores.right.total.toFixed(1)}`, ANSI.dim, color));
   lines.push(paint(`MARGIN  ${result.winner.margin.toFixed(1)} points`, ANSI.dim, color));
   lines.push("");
@@ -79,6 +85,9 @@ export function renderTerminalBattle(result, artifacts, options = {}) {
   lines.push(paint("WHY THIS WON", ANSI.cyan, color));
   lines.push(result.sections.whyThisWon);
   lines.push("");
+  lines.push(paint("MODEL JURY NOTES", ANSI.cyan, color));
+  lines.push(result.sections.modelJuryNotes);
+  lines.push("");
   lines.push(paint("SAVE FILES", ANSI.cyan, color));
   lines.push(paint(`HTML report : ${artifacts.htmlPath}`, ANSI.dim, color));
   lines.push(paint(`JSON result : ${artifacts.jsonPath}`, ANSI.dim, color));
@@ -98,4 +107,51 @@ export function renderReportSummary(report, options = {}) {
 export function renderOpenSummary(targetPath, options = {}) {
   const color = options.color !== false;
   return paint(`Opened: ${targetPath}`, ANSI.dim, color);
+}
+
+export async function presentTerminalBattleApp(result, artifacts, options = {}) {
+  const stdin = options.stdin || process.stdin;
+  const stdout = options.stdout || process.stdout;
+  if (!stdin.isTTY || !stdout.isTTY) {
+    stdout.write(`${renderTerminalBattle(result, artifacts, { color: stdout.isTTY })}\n`);
+    return;
+  }
+
+  const footer = [
+    "",
+    paint("Keys: [o] open report  [q] quit", ANSI.dim, true)
+  ].join("\n");
+
+  const screen = `${renderTerminalBattle(result, artifacts, { color: true })}\n${footer}`;
+  const wasRaw = Boolean(stdin.isRaw);
+
+  readline.emitKeypressEvents(stdin);
+  stdin.setRawMode(true);
+  stdout.write("\u001b[?1049h\u001b[2J\u001b[H\u001b[?25l");
+  stdout.write(screen);
+
+  await new Promise(resolve => {
+    const cleanup = () => {
+      stdin.off("keypress", handleKeypress);
+      stdin.setRawMode(wasRaw);
+      stdout.write("\u001b[?25h\u001b[?1049l");
+      resolve();
+    };
+
+    const handleKeypress = async (_, key = {}) => {
+      if (key.name === "o") {
+        if (options.onOpenReport) {
+          cleanup();
+          await options.onOpenReport(artifacts.htmlPath);
+          return;
+        }
+      }
+
+      if (key.name === "q" || key.name === "return" || key.name === "escape" || (key.ctrl && key.name === "c")) {
+        cleanup();
+      }
+    };
+
+    stdin.on("keypress", handleKeypress);
+  });
 }

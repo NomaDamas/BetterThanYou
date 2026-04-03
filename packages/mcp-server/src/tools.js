@@ -21,13 +21,17 @@ export async function executeBattleTool({
   rightSource,
   leftLabel,
   rightLabel,
+  judgeMode,
+  openAIModel,
   outputDir
 }) {
   const result = await analyzePortraitBattle({
     leftSource,
     rightSource,
     leftLabel,
-    rightLabel
+    rightLabel,
+    judgeMode,
+    openAIModel
   });
   const artifacts = await writeBattleArtifacts(result, { outputDir });
 

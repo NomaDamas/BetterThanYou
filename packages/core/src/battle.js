@@ -2,7 +2,22 @@ import { AXIS_DEFINITIONS, ENGINE_VERSION, PRODUCT_NAME, QUALITATIVE_SECTION_KEY
 import { loadPortraitInput } from "./ingest.js";
 import { scorePortrait } from "./metrics.js";
 import { buildBattleNarrative } from "./narrative.js";
+import { DEFAULT_OPENAI_MODEL, judgePortraitBattleWithOpenAI } from "./openai-judge.js";
 import { createBattleId, round } from "./util.js";
+
+function computeTotalFromAxes(axes) {
+  const weightedTotal = AXIS_DEFINITIONS.reduce((sum, axis) => sum + axes[axis.key] * axis.weight, 0);
+  const weightSum = AXIS_DEFINITIONS.reduce((sum, axis) => sum + axis.weight, 0);
+  return round(weightedTotal / weightSum);
+}
+
+function buildScoreBundle(axes, telemetry = {}) {
+  return {
+    axes,
+    total: computeTotalFromAxes(axes),
+    telemetry
+  };
+}
 
 function buildAxisCards(leftScores, rightScores) {
   return AXIS_DEFINITIONS.map(axis => {
@@ -22,8 +37,11 @@ function buildAxisCards(leftScores, rightScores) {
   });
 }
 
-function pickWinner(leftPortrait, rightPortrait, leftScores, rightScores, axisCards) {
-  const totalDiff = round(Math.abs(leftScores.total - rightScores.total));
+function pickWinner({ leftPortrait, rightPortrait, leftScores, rightScores, axisCards, preferredWinnerId }) {
+  if (preferredWinnerId === "left" || preferredWinnerId === "right") {
+    return preferredWinnerId;
+  }
+
   if (leftScores.total === rightScores.total) {
     const leftLeads = axisCards.filter(card => card.leader === "left").length;
     const rightLeads = axisCards.filter(card => card.leader === "right").length;
@@ -36,23 +54,32 @@ function pickWinner(leftPortrait, rightPortrait, leftScores, rightScores, axisCa
   return leftScores.total > rightScores.total ? leftPortrait.id : rightPortrait.id;
 }
 
-export async function analyzePortraitBattle({
-  leftSource,
-  rightSource,
-  leftLabel,
-  rightLabel
+function buildBattleResult({
+  leftPortrait,
+  rightPortrait,
+  leftScores,
+  rightScores,
+  sections,
+  judgeMode,
+  engineVersion,
+  provider,
+  model,
+  preferredWinnerId,
+  fallbackReason
 }) {
-  const leftPortrait = await loadPortraitInput(leftSource, leftLabel, "left");
-  const rightPortrait = await loadPortraitInput(rightSource, rightLabel, "right");
-  const leftScores = scorePortrait(leftPortrait);
-  const rightScores = scorePortrait(rightPortrait);
   const axisCards = buildAxisCards(leftScores, rightScores);
-  const winnerId = pickWinner(leftPortrait, rightPortrait, leftScores, rightScores, axisCards);
+  const winnerId = pickWinner({
+    leftPortrait,
+    rightPortrait,
+    leftScores,
+    rightScores,
+    axisCards,
+    preferredWinnerId
+  });
   const winnerPortrait = winnerId === "left" ? leftPortrait : rightPortrait;
   const winnerScores = winnerId === "left" ? leftScores : rightScores;
   const opponentScores = winnerId === "left" ? rightScores : leftScores;
   const battleId = createBattleId(leftPortrait.label, rightPortrait.label);
-
   const winner = {
     id: winnerPortrait.id,
     label: winnerPortrait.label,
@@ -62,22 +89,23 @@ export async function analyzePortraitBattle({
     decisive: Math.abs(winnerScores.total - opponentScores.total) >= 6
   };
 
-  const sections = buildBattleNarrative({
-    left: leftPortrait,
-    right: rightPortrait,
-    leftScores,
-    rightScores,
-    winner,
-    axisCards
-  });
+  const enrichedSections = {
+    ...sections,
+    modelJuryNotes: fallbackReason
+      ? `${sections.modelJuryNotes} Fallback: ${fallbackReason}`
+      : sections.modelJuryNotes
+  };
 
   return {
     battleId,
     productName: PRODUCT_NAME,
     createdAt: new Date().toISOString(),
     engine: {
-      version: ENGINE_VERSION,
-      qualitativeSections: QUALITATIVE_SECTION_KEYS
+      version: engineVersion,
+      qualitativeSections: QUALITATIVE_SECTION_KEYS,
+      judgeMode,
+      provider,
+      model
     },
     winner_first: true,
     quantitative_axes: AXIS_DEFINITIONS.map(axis => axis.key),
@@ -108,6 +136,119 @@ export async function analyzePortraitBattle({
     },
     axisCards,
     winner,
-    sections
+    sections: enrichedSections
   };
+}
+
+export async function analyzePortraitBattle({
+  leftSource,
+  rightSource,
+  leftLabel,
+  rightLabel,
+  judgeMode = "auto",
+  openAIModel = DEFAULT_OPENAI_MODEL,
+  openAIJudge = judgePortraitBattleWithOpenAI,
+  openAIConfig = {}
+}) {
+  const leftPortrait = await loadPortraitInput(leftSource, leftLabel, "left");
+  const rightPortrait = await loadPortraitInput(rightSource, rightLabel, "right");
+
+  const openAIKey = openAIConfig.apiKey || process.env.BTY_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  const shouldUseOpenAI = judgeMode === "openai" || (judgeMode === "auto" && Boolean(openAIKey));
+
+  if (shouldUseOpenAI) {
+    try {
+      const judged = await openAIJudge({
+        leftPortrait,
+        rightPortrait,
+        model: openAIModel,
+        ...openAIConfig
+      });
+
+      return buildBattleResult({
+        leftPortrait,
+        rightPortrait,
+        leftScores: buildScoreBundle(judged.leftScores),
+        rightScores: buildScoreBundle(judged.rightScores),
+        sections: judged.sections,
+        judgeMode: "openai",
+        engineVersion: `openai-${judged.model}`,
+        provider: judged.provider,
+        model: judged.model,
+        preferredWinnerId: judged.winnerId
+      });
+    } catch (error) {
+      if (judgeMode === "openai") {
+        throw error;
+      }
+
+      const leftScores = scorePortrait(leftPortrait);
+      const rightScores = scorePortrait(rightPortrait);
+      const sections = buildBattleNarrative({
+        left: leftPortrait,
+        right: rightPortrait,
+        leftScores,
+        rightScores,
+        winner: {
+          id: leftScores.total >= rightScores.total ? "left" : "right",
+          label: leftScores.total >= rightScores.total ? leftPortrait.label : rightPortrait.label,
+          totalScore: Math.max(leftScores.total, rightScores.total),
+          opponentScore: Math.min(leftScores.total, rightScores.total),
+          margin: round(Math.abs(leftScores.total - rightScores.total)),
+          decisive: Math.abs(leftScores.total - rightScores.total) >= 6
+        },
+        axisCards: buildAxisCards(leftScores, rightScores)
+      });
+
+      return buildBattleResult({
+        leftPortrait,
+        rightPortrait,
+        leftScores,
+        rightScores,
+        sections,
+        judgeMode: "heuristic",
+        engineVersion: ENGINE_VERSION,
+        provider: "local",
+        model: null,
+        preferredWinnerId: null,
+        fallbackReason: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  const leftScores = scorePortrait(leftPortrait);
+  const rightScores = scorePortrait(rightPortrait);
+  const axisCards = buildAxisCards(leftScores, rightScores);
+  const heuristicWinnerId = pickWinner({ leftPortrait, rightPortrait, leftScores, rightScores, axisCards });
+  const heuristicWinner = {
+    id: heuristicWinnerId,
+    label: heuristicWinnerId === "left" ? leftPortrait.label : rightPortrait.label,
+    totalScore: heuristicWinnerId === "left" ? leftScores.total : rightScores.total,
+    opponentScore: heuristicWinnerId === "left" ? rightScores.total : leftScores.total,
+    margin: round(Math.abs(leftScores.total - rightScores.total)),
+    decisive: Math.abs(leftScores.total - rightScores.total) >= 6
+  };
+
+  const sections = buildBattleNarrative({
+    left: leftPortrait,
+    right: rightPortrait,
+    leftScores,
+    rightScores,
+    winner: heuristicWinner,
+    axisCards
+  });
+
+  return buildBattleResult({
+    leftPortrait,
+    rightPortrait,
+    leftScores,
+    rightScores,
+    sections,
+    judgeMode: "heuristic",
+    engineVersion: ENGINE_VERSION,
+    provider: "local",
+    model: null,
+    preferredWinnerId: heuristicWinnerId,
+    fallbackReason: judgeMode === "auto" ? "No OPENAI_API_KEY detected. Using heuristic judge." : undefined
+  });
 }

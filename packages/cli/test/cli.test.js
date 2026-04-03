@@ -73,6 +73,9 @@ test("CLI prints winner banner and writes reports from direct paths", async () =
   const output = await runCli([
     leftPath,
     rightPath,
+    "--judge",
+    "heuristic",
+    "--no-app",
     "--out-dir",
     workDir
   ]);
@@ -89,6 +92,9 @@ test("CLI accepts piped portrait paths in implicit battle mode", async () => {
   const { leftPath, rightPath } = await createPortraitFiles(workDir);
 
   const output = await runCli([
+    "--judge",
+    "heuristic",
+    "--no-app",
     "--out-dir",
     workDir
   ], {
@@ -107,6 +113,8 @@ test("CLI can source both portraits from clipboard env overrides and emit JSON",
     "battle",
     "--left-clipboard",
     "--right-clipboard",
+    "--judge",
+    "heuristic",
     "--json",
     "--out-dir",
     workDir
@@ -129,6 +137,9 @@ test("CLI can rebuild a report from saved JSON", async () => {
   await runCli([
     leftPath,
     rightPath,
+    "--judge",
+    "heuristic",
+    "--no-app",
     "--out-dir",
     workDir
   ]);

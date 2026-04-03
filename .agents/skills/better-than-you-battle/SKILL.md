@@ -10,7 +10,7 @@ Use this skill for BetterThanYou work.
 ## Product Priority
 
 - `packages/cli` is the primary product surface.
-- `packages/core` owns scoring, ingestion, result schema, and static HTML report generation.
+- `packages/core` owns scoring, ingestion, result schema, static HTML report generation, and judge mode selection.
 - `packages/mcp-server` is an automation adapter.
 - `apps/web` is an optional helper for non-developers and report viewing.
 - `Formula/better-than-you.rb` exists for Homebrew-based installation work.
@@ -21,8 +21,14 @@ Use this skill for BetterThanYou work.
 - Prefer drag-and-drop file paths, pasted URLs, and clipboard flows in the terminal.
 - Keep winner-first output in terminal, MCP, and HTML reports.
 - Do not duplicate scoring logic outside `packages/core`.
-- Treat the current engine as deterministic heuristic scoring unless explicitly upgrading to a VLM-backed or API-backed judge.
+- Support both deterministic heuristic judging and OpenAI VLM judging.
 - Keep the web helper secondary to the CLI experience.
+
+## Judge Modes
+
+- `heuristic`: local deterministic image scoring
+- `auto`: OpenAI when API key exists, otherwise heuristic fallback
+- `openai`: force OpenAI image judging through the Responses API
 
 ## Quick Commands
 
@@ -31,8 +37,9 @@ pnpm test
 pnpm build
 pnpm cli
 pnpm battle -- <left> <right>
+pnpm battle -- <left> <right> --judge openai --model gpt-4.1-mini
 pnpm report -- ./reports/latest-battle.json
 pnpm web
 pnpm mcp
-brew install --build-from-source ./Formula/better-than-you.rb
+brew reinstall NomaDamas/better-than-you/better-than-you
 ```
