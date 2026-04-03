@@ -1287,6 +1287,21 @@ fn boxed_title(title: &str, color: &str, width: usize, enabled: bool) -> [String
     ]
 }
 
+
+fn info_panel(title: &str, body: &[String], width: usize, color: &str, enabled: bool) -> Vec<String> {
+    let inner = width.saturating_sub(4);
+    let mut lines = Vec::new();
+    lines.push(paint(&format!("┌{}┐", "─".repeat(inner)), color, enabled));
+    lines.push(paint(&format!("│ {:<width$} │", title, width = inner - 2), color, enabled));
+    lines.push(paint(&format!("├{}┤", "─".repeat(inner)), color, enabled));
+    for line in body {
+        let clipped = if line.chars().count() > inner - 2 { line.chars().take(inner - 2).collect::<String>() } else { line.clone() };
+        lines.push(format!("│ {:<width$} │", clipped, width = inner - 2));
+    }
+    lines.push(paint(&format!("└{}┘", "─".repeat(inner)), color, enabled));
+    lines
+}
+
 fn signed_gap(card: &AxisCard, winner_id: &str) -> (String, &'static str) {
     if card.leader == "tie" {
         return ("TIE ".to_string(), ANSI_CYAN);
@@ -1297,19 +1312,25 @@ fn signed_gap(card: &AxisCard, winner_id: &str) -> (String, &'static str) {
 }
 
 pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts, color: bool) -> String {
-    let width = 84;
+    let width = 92;
     let winner_color = if result.winner.id == "left" { ANSI_AMBER } else { ANSI_BLUE };
     let mut lines = Vec::new();
     lines.extend(boxed_title("BETTERTHANYOU // CLI PORTRAIT BATTLE", ANSI_BOLD, width, color));
     lines.extend(boxed_title(&format!("WINNER // {}", result.winner.label.to_uppercase()), winner_color, width, color));
+
     let judge_line = if let Some(model) = &result.engine.model {
-        format!("JUDGE  {} via {}", result.engine.judge_mode, model)
+        format!("Judge: {} via {}", result.engine.judge_mode, model)
     } else {
-        format!("JUDGE  {}", result.engine.judge_mode)
+        format!("Judge: {}", result.engine.judge_mode)
     };
-    lines.push(paint(&judge_line, ANSI_DIM, color));
-    lines.push(paint(&format!("TOTAL   {} {:.1}  vs  {} {:.1}", result.inputs.left.label, result.scores.left.total, result.inputs.right.label, result.scores.right.total), ANSI_DIM, color));
-    lines.push(paint(&format!("MARGIN  {:.1} points", result.winner.margin), ANSI_DIM, color));
+
+    let summary = vec![
+        format!("Left total   : {:.1}", result.scores.left.total),
+        format!("Right total  : {:.1}", result.scores.right.total),
+        format!("Margin       : {:.1} points", result.winner.margin),
+        judge_line,
+    ];
+    lines.extend(info_panel("SUMMARY", &summary, width, ANSI_DIM, color));
     lines.push(String::new());
     lines.push(paint("ABILITY COMPARISON", ANSI_CYAN, color));
     lines.push(paint("Axis                      Left                         Right                        Gap", ANSI_DIM, color));
@@ -1327,19 +1348,22 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
         ));
     }
     lines.push(String::new());
-    lines.push(paint("OVERALL TAKE", ANSI_CYAN, color));
-    lines.push(result.sections.overall_take.clone());
+    let analysis = vec![
+        result.sections.overall_take.clone(),
+        String::new(),
+        format!("Why: {}", result.sections.why_this_won),
+        String::new(),
+        format!("Notes: {}", result.sections.model_jury_notes),
+    ];
+    lines.extend(info_panel("ANALYSIS", &analysis, width, ANSI_CYAN, color));
     lines.push(String::new());
-    lines.push(paint("WHY THIS WON", ANSI_CYAN, color));
-    lines.push(result.sections.why_this_won.clone());
-    lines.push(String::new());
-    lines.push(paint("MODEL JURY NOTES", ANSI_CYAN, color));
-    lines.push(result.sections.model_jury_notes.clone());
-    lines.push(String::new());
-    lines.push(paint("SAVE FILES", ANSI_CYAN, color));
-    lines.push(paint(&format!("HTML report : {}", artifacts.html_path), ANSI_DIM, color));
-    lines.push(paint(&format!("JSON result : {}", artifacts.json_path), ANSI_DIM, color));
-    lines.join("\n")
+    let files = vec![
+        format!("HTML report : {}", artifacts.html_path),
+        format!("JSON result : {}", artifacts.json_path),
+    ];
+    lines.extend(info_panel("SAVE FILES", &files, width, ANSI_DIM, color));
+    lines.join("
+")
 }
 
 pub fn render_report_summary(report: &SavedArtifacts, color: bool) -> String {

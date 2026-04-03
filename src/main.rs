@@ -312,20 +312,20 @@ fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index
 
 
 fn render_menu_screen(title: &str, subtitle: &[String], items: &[String], selected: usize) -> String {
+    let width = 88usize;
     let mut lines = Vec::new();
-    lines.push(title.to_string());
-    lines.push(String::new());
-    lines.extend(subtitle.iter().cloned());
-    if !subtitle.is_empty() {
-        lines.push(String::new());
+    lines.push(format!("╔{}╗", "═".repeat(width - 2)));
+    lines.push(format!("║{:^width$}║", title, width = width - 2));
+    lines.push(format!("╠{}╣", "═".repeat(width - 2)));
+    for line in subtitle {
+        lines.push(format!("║ {:<width$}║", line, width = width - 3));
     }
+    lines.push(format!("╠{}╣", "═".repeat(width - 2)));
     for (index, item) in items.iter().enumerate() {
-        if index == selected {
-            lines.push(format!("  › {}", item));
-        } else {
-            lines.push(format!("    {}", item));
-        }
+        let prefix = if index == selected { "›" } else { " " };
+        lines.push(format!("║ {} {:<width$}║", prefix, item, width = width - 5));
     }
+    lines.push(format!("╚{}╝", "═".repeat(width - 2)));
     lines.join("
 ")
 }
