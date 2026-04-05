@@ -1,3 +1,5 @@
+mod ui;
+
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
@@ -6,15 +8,10 @@ use std::process::Command;
 use anyhow::{bail, Result};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
-    present_terminal_battle_app, read_clipboard_text, regenerate_battle_report,
-    render_open_summary, render_report_summary, render_terminal_battle, save_battle_artifacts,
-    write_clipboard_text, AnalyzeOptions, BattleResult, JudgeMode,
+    read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
+    render_terminal_battle, save_battle_artifacts, write_clipboard_text, AnalyzeOptions, BattleResult, JudgeMode,
 };
 use clap::{Parser, Subcommand, ValueEnum};
-use crossterm::cursor;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::execute;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, ValueEnum, Serialize, Deserialize)]
@@ -269,76 +266,10 @@ fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index
         return Ok(Some(initial_index.min(items.len().saturating_sub(1))));
     }
 
-    let mut stdout = io::stdout();
-    let mut selected = initial_index.min(items.len().saturating_sub(1));
-
-    enable_raw_mode()?;
-    execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
-
-    loop {
-        let screen = render_menu_screen(title, subtitle, items, selected);
-        write_menu_screen(&mut stdout, &screen)?;
-
-        if let Event::Key(key) = event::read()? {
-            if key.kind != KeyEventKind::Press {
-                continue;
-            }
-            match key.code {
-                KeyCode::Up => {
-                    selected = selected.saturating_sub(1);
-                }
-                KeyCode::Down => {
-                    if selected + 1 < items.len() {
-                        selected += 1;
-                    }
-                }
-                KeyCode::Enter => {
-                    break;
-                }
-                KeyCode::Esc | KeyCode::Char('q') => {
-                    disable_raw_mode()?;
-                    execute!(stdout, LeaveAlternateScreen, cursor::Show)?;
-                    return Ok(None);
-                }
-                _ => {}
-            }
-        }
-    }
-
-    disable_raw_mode()?;
-    execute!(stdout, LeaveAlternateScreen, cursor::Show)?;
-    Ok(Some(selected))
+    ui::select_menu(title, subtitle, items, initial_index)
 }
 
 
-fn render_menu_screen(title: &str, subtitle: &[String], items: &[String], selected: usize) -> String {
-    let width = 88usize;
-    let mut lines = Vec::new();
-    lines.push(format!("╔{}╗", "═".repeat(width - 2)));
-    lines.push(format!("║{:^width$}║", title, width = width - 2));
-    lines.push(format!("╠{}╣", "═".repeat(width - 2)));
-    for line in subtitle {
-        lines.push(format!("║ {:<width$}║", line, width = width - 3));
-    }
-    lines.push(format!("╠{}╣", "═".repeat(width - 2)));
-    for (index, item) in items.iter().enumerate() {
-        let prefix = if index == selected { "›" } else { " " };
-        lines.push(format!("║ {} {:<width$}║", prefix, item, width = width - 5));
-    }
-    lines.push(format!("╚{}╝", "═".repeat(width - 2)));
-    lines.join("
-")
-}
-
-fn write_menu_screen(stdout: &mut io::Stdout, screen: &str) -> Result<()> {
-    execute!(stdout, cursor::MoveTo(0, 0), Clear(ClearType::All))?;
-    for (row, line) in screen.lines().enumerate() {
-        execute!(stdout, cursor::MoveTo(0, row as u16))?;
-        write!(stdout, "{}", line)?;
-    }
-    stdout.flush()?;
-    Ok(())
-}
 
 fn judge_index(judge: &JudgeCli) -> usize {
     match judge {
@@ -410,7 +341,7 @@ async fn run_battle(args: BattleArgs) -> Result<()> {
     }
 
     if !args.no_app && io::stdin().is_terminal() && io::stdout().is_terminal() {
-        present_terminal_battle_app(&result, &artifacts, None)?;
+        ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None)?;
     } else {
         println!("{}", render_terminal_battle(&result, &artifacts, io::stdout().is_terminal()));
     }
@@ -601,7 +532,7 @@ async fn run_interactive_app() -> Result<()> {
         state.last_json = Some(PathBuf::from(&artifacts.json_path));
         state.last_html = Some(PathBuf::from(&artifacts.html_path));
         state.last_result = Some(result.clone());
-        present_terminal_battle_app(&result, &artifacts, None)?;
+        ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None)?;
 
         loop {
             let mut items = vec![

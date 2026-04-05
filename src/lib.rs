@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
