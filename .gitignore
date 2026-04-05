@@ -5,3 +5,6 @@ coverage
 .DS_Store
 packages/core/test/tmp-artifacts/
 target/
+gpt
+gptOB
+reports/*-share/
