@@ -502,78 +502,113 @@ async fn run_interactive_app() -> Result<()> {
     let mut state = SessionState::new();
 
     loop {
-        if state.left.is_none() {
-            state.left = Some(prompt_line("Drag or paste LEFT portrait path/URL/data URL: ")?);
+        let mut items = vec![
+            "Start Battle".to_string(),
+            "Open Latest Report".to_string(),
+            "Share Latest Result".to_string(),
+            "Settings".to_string(),
+        ];
+        if !state.app_state.star_acknowledged {
+            items.push("Star BetterThanYou on GitHub".to_string());
         }
-        if state.right.is_none() {
-            state.right = Some(prompt_line("Drag or paste RIGHT portrait path/URL/data URL: ")?);
-        }
+        items.push("Quit".to_string());
 
-        if matches!(state.judge, JudgeCli::Openai) {
-            ensure_openai_ready(&mut state)?;
-        }
+        let subtitle = vec![
+            "Drop two portraits, get a winner-first battle card, then decide what to do next.".to_string(),
+            format!("Judge: {}", state.judge.as_str()),
+            format!("Model: {}", state.model),
+            format!("Output: {}", state.out_dir.display()),
+        ];
 
-        let args = BattleArgs {
-            left: state.left.clone(),
-            right: state.right.clone(),
-            left_label: state.left_label.clone(),
-            right_label: state.right_label.clone(),
-            out_dir: Some(state.out_dir.clone()),
-            left_clipboard: false,
-            right_clipboard: false,
-            judge: state.judge.clone(),
-            model: state.model.clone(),
-            json: false,
-            open: false,
-            no_app: false,
-        };
-        let (result, artifacts) = battle_from_args(&args, Some(&state)).await?;
-        state.last_pair = Some((state.left.clone().unwrap_or_default(), state.right.clone().unwrap_or_default()));
-        state.last_json = Some(PathBuf::from(&artifacts.json_path));
-        state.last_html = Some(PathBuf::from(&artifacts.html_path));
-        state.last_result = Some(result.clone());
-        ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None)?;
+        match select_menu("BetterThanYou", &subtitle, &items, 0)? {
+            Some(0) => {
+                if state.left.is_none() {
+                    state.left = Some(prompt_line("Drag or paste LEFT portrait path/URL/data URL: ")?);
+                }
+                if state.right.is_none() {
+                    state.right = Some(prompt_line("Drag or paste RIGHT portrait path/URL/data URL: ")?);
+                }
+                if matches!(state.judge, JudgeCli::Openai) {
+                    ensure_openai_ready(&mut state)?;
+                }
+                let args = BattleArgs {
+                    left: state.left.clone(),
+                    right: state.right.clone(),
+                    left_label: state.left_label.clone(),
+                    right_label: state.right_label.clone(),
+                    out_dir: Some(state.out_dir.clone()),
+                    left_clipboard: false,
+                    right_clipboard: false,
+                    judge: state.judge.clone(),
+                    model: state.model.clone(),
+                    json: false,
+                    open: false,
+                    no_app: false,
+                };
+                let (result, artifacts) = battle_from_args(&args, Some(&state)).await?;
+                state.last_pair = Some((state.left.clone().unwrap_or_default(), state.right.clone().unwrap_or_default()));
+                state.last_json = Some(PathBuf::from(&artifacts.json_path));
+                state.last_html = Some(PathBuf::from(&artifacts.html_path));
+                state.last_result = Some(result.clone());
+                ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None)?;
 
-        loop {
-            let mut items = vec![
-                "Rematch Same Pair".to_string(),
-                "Choose New Portraits".to_string(),
-                "Share Latest Result".to_string(),
-                "Open Latest Report".to_string(),
-                "Settings".to_string(),
-            ];
-            if !state.app_state.star_acknowledged {
-                items.push("Star BetterThanYou on GitHub".to_string());
+                loop {
+                    let mut next_items = vec![
+                        "Rematch Same Pair".to_string(),
+                        "Choose New Portraits".to_string(),
+                        "Share Latest Result".to_string(),
+                        "Open Latest Report".to_string(),
+                        "Settings".to_string(),
+                    ];
+                    if !state.app_state.star_acknowledged {
+                        next_items.push("Star BetterThanYou on GitHub".to_string());
+                    }
+                    next_items.push("Back to Home".to_string());
+                    next_items.push("Quit".to_string());
+
+                    let next_subtitle = vec![
+                        format!("Winner: {}", result.winner.label),
+                        format!("Judge: {}", state.judge.as_str()),
+                        format!("HTML: {}", artifacts.html_path),
+                    ];
+
+                    match select_menu("What next?", &next_subtitle, &next_items, 0)? {
+                        Some(0) => break,
+                        Some(1) => {
+                            state.left = None;
+                            state.right = None;
+                            break;
+                        }
+                        Some(2) => run_share_menu(&mut state)?,
+                        Some(3) => {
+                            let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
+                            open_path(&path)?;
+                        }
+                        Some(4) => run_settings_menu(&mut state)?,
+                        Some(5) if !state.app_state.star_acknowledged => {
+                            let star_url = "https://github.com/NomaDamas/BetterThanYou";
+                            let _ = Command::new("open").arg(star_url).status();
+                            state.app_state.star_acknowledged = true;
+                            save_app_state(&state.app_state)?;
+                        }
+                        Some(index) if (!state.app_state.star_acknowledged && index == 6) || (state.app_state.star_acknowledged && index == 5) => break,
+                        _ => return Ok(()),
+                    }
+                }
             }
-            items.push("Quit".to_string());
-
-            let subtitle = vec![
-                format!("Winner: {}", result.winner.label),
-                format!("Judge: {}", state.judge.as_str()),
-                format!("HTML: {}", artifacts.html_path),
-            ];
-
-            match select_menu("What next?", &subtitle, &items, 0)? {
-                Some(0) => break,
-                Some(1) => {
-                    state.left = None;
-                    state.right = None;
-                    break;
-                }
-                Some(2) => run_share_menu(&mut state)?,
-                Some(3) => {
-                    let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
-                    open_path(&path)?;
-                }
-                Some(4) => run_settings_menu(&mut state)?,
-                Some(5) if !state.app_state.star_acknowledged => {
-                    let star_url = "https://github.com/NomaDamas/BetterThanYou";
-                    let _ = Command::new("open").arg(star_url).status();
-                    state.app_state.star_acknowledged = true;
-                    save_app_state(&state.app_state)?;
-                }
-                _ => return Ok(()),
+            Some(1) => {
+                let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
+                open_path(&path)?;
             }
+            Some(2) => run_share_menu(&mut state)?,
+            Some(3) => run_settings_menu(&mut state)?,
+            Some(4) if !state.app_state.star_acknowledged => {
+                let star_url = "https://github.com/NomaDamas/BetterThanYou";
+                let _ = Command::new("open").arg(star_url).status();
+                state.app_state.star_acknowledged = true;
+                save_app_state(&state.app_state)?;
+            }
+            _ => return Ok(()),
         }
     }
 }
