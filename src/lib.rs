@@ -20,12 +20,45 @@ pub const PRODUCT_NAME: &str = "BetterThanYou";
 pub const ENGINE_VERSION: &str = "deterministic-heuristic-v1";
 pub const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
 
+pub const OPENAI_VLM_MODELS: &[&str] = &[
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "o3",
+    "o4-mini",
+];
+
+pub const ANTHROPIC_VLM_MODELS: &[&str] = &[
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-5-20251101",
+    "claude-opus-4-1-20250805",
+    "claude-sonnet-4-20250514",
+    "claude-opus-4-20250514",
+];
+
+pub const GEMINI_VLM_MODELS: &[&str] = &[
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+];
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum JudgeMode {
     Auto,
     Heuristic,
     Openai,
+    Anthropic,
+    Gemini,
 }
 
 impl JudgeMode {
@@ -34,7 +67,121 @@ impl JudgeMode {
             Self::Auto => "auto",
             Self::Heuristic => "heuristic",
             Self::Openai => "openai",
+            Self::Anthropic => "anthropic",
+            Self::Gemini => "gemini",
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    English,
+    Korean,
+    Japanese,
+}
+
+impl Language {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::English => "English",
+            Self::Korean => "한국어",
+            Self::Japanese => "日本語",
+        }
+    }
+}
+
+pub fn t(lang: Language, key: &str) -> &'static str {
+    match (lang, key) {
+        // Menu items
+        (Language::Korean, "start_battle") => "배틀 시작",
+        (Language::Korean, "open_report") => "최근 리포트 열기",
+        (Language::Korean, "share_result") => "결과 공유",
+        (Language::Korean, "settings") => "설정",
+        (Language::Korean, "quit") => "종료",
+        (Language::Korean, "star_github") => "GitHub 스타 주기",
+        (Language::Korean, "back") => "뒤로",
+        (Language::Korean, "rematch") => "같은 상대로 재대결",
+        (Language::Korean, "new_portraits") => "새 초상화 선택",
+        (Language::Korean, "battle_setup") => "배틀 준비",
+        (Language::Korean, "left_portrait") => "왼쪽 초상화",
+        (Language::Korean, "right_portrait") => "오른쪽 초상화",
+        (Language::Korean, "waiting") => "대기 중...",
+        (Language::Korean, "ready") => "준비 완료",
+        (Language::Korean, "switch_side") => "패널 전환",
+        (Language::Korean, "fill_both") => "양쪽 다 입력",
+        (Language::Korean, "cancel") => "취소",
+        (Language::Korean, "press_start") => "아무 키를 눌러 시작",
+        (Language::Korean, "analyzing") => "분석 중...",
+        (Language::Korean, "battle_result") => "배틀 결과",
+        (Language::Korean, "winner") => "승자",
+        (Language::Korean, "judge_mode") => "심판 모드",
+        (Language::Korean, "model") => "모델",
+        (Language::Korean, "language") => "언어",
+        (Language::Korean, "api_keys") => "API 키 관리",
+        (Language::Korean, "labels") => "라벨",
+        (Language::Korean, "output_dir") => "출력 디렉토리",
+        (Language::Korean, "aesthetic_tuning") => "미적 조정",
+
+        (Language::Japanese, "start_battle") => "バトル開始",
+        (Language::Japanese, "open_report") => "最新レポートを開く",
+        (Language::Japanese, "share_result") => "結果共有",
+        (Language::Japanese, "settings") => "設定",
+        (Language::Japanese, "quit") => "終了",
+        (Language::Japanese, "star_github") => "GitHubスター",
+        (Language::Japanese, "back") => "戻る",
+        (Language::Japanese, "rematch") => "再戦",
+        (Language::Japanese, "new_portraits") => "新しい写真を選択",
+        (Language::Japanese, "battle_setup") => "バトル準備",
+        (Language::Japanese, "left_portrait") => "左の写真",
+        (Language::Japanese, "right_portrait") => "右の写真",
+        (Language::Japanese, "waiting") => "待機中...",
+        (Language::Japanese, "ready") => "準備完了",
+        (Language::Japanese, "switch_side") => "パネル切替",
+        (Language::Japanese, "fill_both") => "両方入力",
+        (Language::Japanese, "cancel") => "キャンセル",
+        (Language::Japanese, "press_start") => "キーを押してスタート",
+        (Language::Japanese, "analyzing") => "分析中...",
+        (Language::Japanese, "battle_result") => "バトル結果",
+        (Language::Japanese, "winner") => "勝者",
+        (Language::Japanese, "judge_mode") => "審査モード",
+        (Language::Japanese, "model") => "モデル",
+        (Language::Japanese, "language") => "言語",
+        (Language::Japanese, "api_keys") => "APIキー管理",
+        (Language::Japanese, "labels") => "ラベル",
+        (Language::Japanese, "output_dir") => "出力ディレクトリ",
+        (Language::Japanese, "aesthetic_tuning") => "美的調整",
+
+        // English defaults
+        (_, "start_battle") => "Start Battle",
+        (_, "open_report") => "Open Latest Report",
+        (_, "share_result") => "Share Latest Result",
+        (_, "settings") => "Settings",
+        (_, "quit") => "Quit",
+        (_, "star_github") => "Star BetterThanYou on GitHub",
+        (_, "back") => "Back",
+        (_, "rematch") => "Rematch Same Pair",
+        (_, "new_portraits") => "Choose New Portraits",
+        (_, "battle_setup") => "Battle Setup",
+        (_, "left_portrait") => "LEFT PORTRAIT",
+        (_, "right_portrait") => "RIGHT PORTRAIT",
+        (_, "waiting") => "waiting...",
+        (_, "ready") => "ready",
+        (_, "switch_side") => "Switch side",
+        (_, "fill_both") => "fill both",
+        (_, "cancel") => "Cancel",
+        (_, "press_start") => "PRESS ANY KEY TO START",
+        (_, "analyzing") => "Analyzing...",
+        (_, "battle_result") => "BATTLE RESULT",
+        (_, "winner") => "WINNER",
+        (_, "judge_mode") => "Judge mode",
+        (_, "model") => "Model",
+        (_, "language") => "Language",
+        (_, "api_keys") => "API keys",
+        (_, "labels") => "Labels",
+        (_, "output_dir") => "Output directory",
+        (_, "aesthetic_tuning") => "Aesthetic tuning",
+        _ => "",
     }
 }
 
@@ -611,8 +758,10 @@ fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: Scor
         engine: EngineMeta {
             version: match judge_mode {
                 JudgeMode::Heuristic => ENGINE_VERSION.to_string(),
-                JudgeMode::Auto => if provider == "openai" { format!("openai-{}", model.clone().unwrap_or_default()) } else { ENGINE_VERSION.to_string() },
+                JudgeMode::Auto => if provider == "local" { ENGINE_VERSION.to_string() } else { format!("{}-{}", provider, model.clone().unwrap_or_default()) },
                 JudgeMode::Openai => format!("openai-{}", model.clone().unwrap_or_default()),
+                JudgeMode::Anthropic => format!("anthropic-{}", model.clone().unwrap_or_default()),
+                JudgeMode::Gemini => format!("gemini-{}", model.clone().unwrap_or_default()),
             },
             qualitative_sections: vec!["overall_take", "strengths", "weaknesses", "why_this_won", "model_jury_notes"].into_iter().map(str::to_string).collect(),
             judge_mode: judge_mode.as_str().to_string(),
@@ -766,19 +915,247 @@ async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model:
     })
 }
 
+fn parse_data_url(data_url: &str) -> (String, String) {
+    if let Some(comma_pos) = data_url.find(',') {
+        let header = &data_url[..comma_pos];
+        let base64_data = &data_url[comma_pos + 1..];
+        let media_type = header
+            .strip_prefix("data:")
+            .and_then(|s| s.split(';').next())
+            .unwrap_or("image/jpeg")
+            .to_string();
+        (media_type, base64_data.to_string())
+    } else {
+        ("image/jpeg".to_string(), data_url.to_string())
+    }
+}
+
+fn parse_vlm_axes(parsed: &Value, key: &str) -> AxisScores {
+    let scores = parsed.get(key).and_then(Value::as_object).cloned().unwrap_or_default();
+    AxisScores {
+        symmetry_harmony: round(scores.get("symmetry_harmony").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+        lighting_contrast: round(scores.get("lighting_contrast").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+        sharpness_detail: round(scores.get("sharpness_detail").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+        color_vitality: round(scores.get("color_vitality").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+        composition_presence: round(scores.get("composition_presence").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+        style_aura: round(scores.get("style_aura").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+    }
+}
+
+fn parse_vlm_sections(parsed: &Value) -> Result<BattleSections> {
+    let sections = parsed.get("sections").and_then(Value::as_object).ok_or_else(|| anyhow!("VLM judge missing sections object"))?;
+    Ok(BattleSections {
+        overall_take: sections.get("overall_take").and_then(Value::as_str).unwrap_or_default().to_string(),
+        strengths: SideTexts {
+            left: sections.get("strengths_left").and_then(Value::as_str).unwrap_or_default().to_string(),
+            right: sections.get("strengths_right").and_then(Value::as_str).unwrap_or_default().to_string(),
+        },
+        weaknesses: SideTexts {
+            left: sections.get("weaknesses_left").and_then(Value::as_str).unwrap_or_default().to_string(),
+            right: sections.get("weaknesses_right").and_then(Value::as_str).unwrap_or_default().to_string(),
+        },
+        why_this_won: sections.get("why_this_won").and_then(Value::as_str).unwrap_or_default().to_string(),
+        model_jury_notes: sections.get("model_jury_notes").and_then(Value::as_str).unwrap_or_default().to_string(),
+    })
+}
+
+fn vlm_json_prompt() -> String {
+    let schema_str = serde_json::to_string_pretty(&json!({
+        "winner_id": "left or right",
+        "left_scores": { "symmetry_harmony": 0, "lighting_contrast": 0, "sharpness_detail": 0, "color_vitality": 0, "composition_presence": 0, "style_aura": 0 },
+        "right_scores": { "symmetry_harmony": 0, "lighting_contrast": 0, "sharpness_detail": 0, "color_vitality": 0, "composition_presence": 0, "style_aura": 0 },
+        "sections": {
+            "overall_take": "",
+            "strengths_left": "",
+            "strengths_right": "",
+            "weaknesses_left": "",
+            "weaknesses_right": "",
+            "why_this_won": "",
+            "model_jury_notes": ""
+        }
+    })).unwrap_or_default();
+
+    format!(
+        "You are BetterThanYou, a visual battle judge for fictional AI-generated adult portraits. \
+         Judge only image result and presentation quality. Return one winner and score both portraits on every axis from 0 to 100. \
+         Axes: {}. \
+         You MUST respond with ONLY a JSON object (no markdown, no explanation, no code fences) matching this exact schema:\n{}",
+        AXIS_DEFINITIONS.iter().map(|axis| format!("{}: {}", axis.key, axis.label)).collect::<Vec<_>>().join(", "),
+        schema_str
+    )
+}
+
+async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig) -> Result<OpenAiJudgeOutput> {
+    let api_key = config.api_key.clone()
+        .or_else(|| std::env::var("BTY_ANTHROPIC_API_KEY").ok())
+        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+        .ok_or_else(|| anyhow!("Anthropic judging requires ANTHROPIC_API_KEY or BTY_ANTHROPIC_API_KEY"))?;
+
+    let (left_media_type, left_b64) = parse_data_url(&left.image_data_url);
+    let (right_media_type, right_b64) = parse_data_url(&right.image_data_url);
+
+    let prompt = vlm_json_prompt();
+
+    let body = json!({
+        "model": model,
+        "max_tokens": 4096,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image", "source": {"type": "base64", "media_type": left_media_type, "data": left_b64}},
+                {"type": "image", "source": {"type": "base64", "media_type": right_media_type, "data": right_b64}}
+            ]
+        }]
+    });
+
+    let client = Client::new();
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        bail!("Anthropic judge failed: HTTP {} {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let payload: Value = response.json().await?;
+    let output_text = payload
+        .get("content")
+        .and_then(Value::as_array)
+        .and_then(|arr| arr.first())
+        .and_then(|item| item.get("text"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Anthropic judge returned no output text"))?;
+
+    let parsed: Value = serde_json::from_str(output_text)
+        .with_context(|| format!("Failed to parse Anthropic JSON response: {}", &output_text[..output_text.len().min(200)]))?;
+
+    Ok(OpenAiJudgeOutput {
+        winner_id: parsed.get("winner_id").and_then(Value::as_str).unwrap_or("left").to_string(),
+        left_scores: parse_vlm_axes(&parsed, "left_scores"),
+        right_scores: parse_vlm_axes(&parsed, "right_scores"),
+        sections: parse_vlm_sections(&parsed)?,
+        provider: "anthropic".to_string(),
+        model: model.to_string(),
+    })
+}
+
+async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig) -> Result<OpenAiJudgeOutput> {
+    let api_key = config.api_key.clone()
+        .or_else(|| std::env::var("BTY_GEMINI_API_KEY").ok())
+        .or_else(|| std::env::var("GEMINI_API_KEY").ok())
+        .ok_or_else(|| anyhow!("Gemini judging requires GEMINI_API_KEY or BTY_GEMINI_API_KEY"))?;
+
+    let (left_media_type, left_b64) = parse_data_url(&left.image_data_url);
+    let (right_media_type, right_b64) = parse_data_url(&right.image_data_url);
+
+    let prompt = vlm_json_prompt();
+
+    let body = json!({
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {"inline_data": {"mime_type": left_media_type, "data": left_b64}},
+                {"inline_data": {"mime_type": right_media_type, "data": right_b64}}
+            ]
+        }],
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    });
+
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+        model, api_key
+    );
+
+    let client = Client::new();
+    let response = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        bail!("Gemini judge failed: HTTP {} {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let payload: Value = response.json().await?;
+    let output_text = payload
+        .get("candidates")
+        .and_then(Value::as_array)
+        .and_then(|arr| arr.first())
+        .and_then(|candidate| candidate.get("content"))
+        .and_then(|content| content.get("parts"))
+        .and_then(Value::as_array)
+        .and_then(|parts| parts.first())
+        .and_then(|part| part.get("text"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Gemini judge returned no output text"))?;
+
+    let parsed: Value = serde_json::from_str(output_text)
+        .with_context(|| format!("Failed to parse Gemini JSON response: {}", &output_text[..output_text.len().min(200)]))?;
+
+    Ok(OpenAiJudgeOutput {
+        winner_id: parsed.get("winner_id").and_then(Value::as_str).unwrap_or("left").to_string(),
+        left_scores: parse_vlm_axes(&parsed, "left_scores"),
+        right_scores: parse_vlm_axes(&parsed, "right_scores"),
+        sections: parse_vlm_sections(&parsed)?,
+        provider: "gemini".to_string(),
+        model: model.to_string(),
+    })
+}
+
 pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, openai_override: Option<OpenAiJudgeOutput>) -> Result<BattleResult> {
     let axis_definitions = axis_definitions_with_overrides(&options.axis_weights)?;
     let left = load_portrait(&options.left_source, options.left_label.as_deref(), "left").await?;
     let right = load_portrait(&options.right_source, options.right_label.as_deref(), "right").await?;
 
-    let api_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok()).or_else(|| std::env::var("OPENAI_API_KEY").ok()).is_some();
-    let should_use_openai = matches!(options.judge_mode, JudgeMode::Openai) || (matches!(options.judge_mode, JudgeMode::Auto) && api_key_present);
+    let openai_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok()).or_else(|| std::env::var("OPENAI_API_KEY").ok()).is_some();
+    let anthropic_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_ANTHROPIC_API_KEY").ok()).or_else(|| std::env::var("ANTHROPIC_API_KEY").ok()).is_some();
+    let gemini_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_GEMINI_API_KEY").ok()).or_else(|| std::env::var("GEMINI_API_KEY").ok()).is_some();
 
-    if should_use_openai {
-        let judged = if let Some(override_result) = openai_override {
-            Ok(override_result)
-        } else {
-            judge_with_openai(&left, &right, &options.openai_model, &options.openai_config).await
+    // Determine which VLM provider to try
+    let vlm_mode = match options.judge_mode {
+        JudgeMode::Openai => Some(JudgeMode::Openai),
+        JudgeMode::Anthropic => Some(JudgeMode::Anthropic),
+        JudgeMode::Gemini => Some(JudgeMode::Gemini),
+        JudgeMode::Auto => {
+            if openai_key_present {
+                Some(JudgeMode::Openai)
+            } else if anthropic_key_present {
+                Some(JudgeMode::Anthropic)
+            } else if gemini_key_present {
+                Some(JudgeMode::Gemini)
+            } else {
+                None
+            }
+        }
+        JudgeMode::Heuristic => None,
+    };
+
+    if let Some(mode) = vlm_mode {
+        let judged = match mode {
+            JudgeMode::Openai => {
+                if let Some(override_result) = openai_override {
+                    Ok(override_result)
+                } else {
+                    judge_with_openai(&left, &right, &options.openai_model, &options.openai_config).await
+                }
+            }
+            JudgeMode::Anthropic => {
+                judge_with_anthropic(&left, &right, &options.openai_model, &options.openai_config).await
+            }
+            JudgeMode::Gemini => {
+                judge_with_gemini(&left, &right, &options.openai_model, &options.openai_config).await
+            }
+            _ => unreachable!(),
         };
 
         match judged {
@@ -787,7 +1164,7 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
                 let right_axes = vlm.right_scores.clone();
                 let left_scores = ScoreBundle { axes: left_axes.clone(), total: round(compute_total_from_axes(&left_axes, &axis_definitions)), telemetry: None };
                 let right_scores = ScoreBundle { axes: right_axes.clone(), total: round(compute_total_from_axes(&right_axes, &axis_definitions)), telemetry: None };
-                return Ok(build_result(&left, &right, left_scores, right_scores, vlm.sections, JudgeMode::Openai, &vlm.provider, Some(vlm.model), Some(&vlm.winner_id), None));
+                return Ok(build_result(&left, &right, left_scores, right_scores, vlm.sections, mode, &vlm.provider, Some(vlm.model), Some(&vlm.winner_id), None));
             }
             Err(error) if matches!(options.judge_mode, JudgeMode::Auto) => {
                 let left_scores = score_portrait(&left, &axis_definitions);
@@ -822,7 +1199,7 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
         decisive: (left_scores.total - right_scores.total).abs() >= 6.0,
     };
     let sections = build_battle_narrative(&left, &right, &left_scores, &right_scores, &winner, &axis_cards);
-    Ok(build_result(&left, &right, left_scores, right_scores, sections, JudgeMode::Heuristic, "local", None, Some(&winner_id), if matches!(options.judge_mode, JudgeMode::Auto) { Some("No OPENAI_API_KEY detected. Using heuristic judge.".into()) } else { None }))
+    Ok(build_result(&left, &right, left_scores, right_scores, sections, JudgeMode::Heuristic, "local", None, Some(&winner_id), if matches!(options.judge_mode, JudgeMode::Auto) { Some("No VLM API key detected. Using heuristic judge.".into()) } else { None }))
 }
 
 pub async fn analyze_portrait_battle(options: AnalyzeOptions) -> Result<BattleResult> {
@@ -1152,6 +1529,33 @@ fn render_share_image(result: &BattleResult, platform: &str) -> RgbaImage {
     draw_text_8x8(&mut canvas, width / 2 + 24, height - 180, &format!("RIGHT {:.1}", result.scores.right.total), Rgba([141, 183, 255, 255]), 2);
     draw_text_8x8(&mut canvas, 28, height - 140, &format!("JUDGE {}", result.engine.judge_mode.to_uppercase()), Rgba([210, 197, 178, 255]), 2);
     draw_text_8x8(&mut canvas, 28, height - 100, &format!("MARGIN {:.1}", result.winner.margin), Rgba([245, 239, 228, 255]), 2);
+
+    // Draw axis stat bars for taller platforms (story/tiktok/pinterest)
+    if height >= 1350 {
+        let bar_y_start = (height as i64 / 2 + 80).min(height as i64 - 400) as u32;
+        let bar_width = width - 80;
+        let bar_height = 16u32;
+        let row_spacing = 42u32;
+
+        for (i, card) in result.axis_cards.iter().enumerate() {
+            let y = bar_y_start + (i as u32) * row_spacing;
+            // Label
+            draw_text_8x8(&mut canvas, 40, y, &card.label.to_uppercase(), Rgba([255, 214, 107, 255]), 1);
+            // Left bar
+            let left_w = ((card.left / 100.0) * (bar_width / 2 - 60) as f32) as u32;
+            draw_block(&mut canvas, 40, y + 14, left_w, bar_height, Rgba([255, 143, 66, 200]));
+            draw_text_8x8(&mut canvas, 40 + left_w + 6, y + 14, &format!("{:.0}", card.left), Rgba([220, 220, 240, 255]), 1);
+            // Right bar
+            let right_w = ((card.right / 100.0) * (bar_width / 2 - 60) as f32) as u32;
+            draw_block(&mut canvas, width / 2 + 10, y + 14, right_w, bar_height, Rgba([100, 180, 255, 200]));
+            draw_text_8x8(&mut canvas, width / 2 + 10 + right_w + 6, y + 14, &format!("{:.0}", card.right), Rgba([220, 220, 240, 255]), 1);
+            // Winner indicator
+            let leader_color = if card.leader == "left" { Rgba([80, 255, 120, 255]) } else if card.leader == "right" { Rgba([80, 255, 120, 255]) } else { Rgba([0, 255, 220, 255]) };
+            let leader_text = if card.leader == "tie" { "TIE" } else if card.leader == result.winner.id { "WIN" } else { "" };
+            draw_text_8x8(&mut canvas, width - 80, y + 14, leader_text, leader_color, 1);
+        }
+    }
+
     canvas
 }
 

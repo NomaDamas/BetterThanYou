@@ -4,13 +4,15 @@ use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
     read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
     render_terminal_battle, save_battle_artifacts, write_clipboard_text, AnalyzeOptions, AXIS_DEFINITIONS,
-    BattleResult, JudgeMode,
+    BattleResult, JudgeMode, Language, t, OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,8 @@ enum JudgeCli {
     Auto,
     Heuristic,
     Openai,
+    Anthropic,
+    Gemini,
 }
 
 impl From<JudgeCli> for JudgeMode {
@@ -28,6 +32,8 @@ impl From<JudgeCli> for JudgeMode {
             JudgeCli::Auto => JudgeMode::Auto,
             JudgeCli::Heuristic => JudgeMode::Heuristic,
             JudgeCli::Openai => JudgeMode::Openai,
+            JudgeCli::Anthropic => JudgeMode::Anthropic,
+            JudgeCli::Gemini => JudgeMode::Gemini,
         }
     }
 }
@@ -38,6 +44,8 @@ impl JudgeCli {
             Self::Auto => "auto",
             Self::Heuristic => "heuristic",
             Self::Openai => "openai",
+            Self::Anthropic => "anthropic",
+            Self::Gemini => "gemini",
         }
     }
 }
@@ -132,11 +140,17 @@ struct OpenArgs {
 struct AppState {
     star_acknowledged: bool,
     openai_api_key: Option<String>,
+    #[serde(default)]
+    anthropic_api_key: Option<String>,
+    #[serde(default)]
+    gemini_api_key: Option<String>,
     judge: Option<JudgeCli>,
     model: Option<String>,
     out_dir: Option<PathBuf>,
     #[serde(default)]
     axis_weights: Vec<(String, f32)>,
+    #[serde(default)]
+    language: Option<Language>,
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +168,7 @@ struct SessionState {
     last_html: Option<PathBuf>,
     last_result: Option<BattleResult>,
     last_pair: Option<(String, String)>,
+    language: Language,
 }
 
 impl SessionState {
@@ -164,6 +179,7 @@ impl SessionState {
             model: app_state.model.clone().unwrap_or_else(|| "gpt-4.1-mini".to_string()),
             out_dir: app_state.out_dir.clone().unwrap_or_else(default_reports_dir),
             axis_weights: app_state.axis_weights.clone(),
+            language: app_state.language.unwrap_or(Language::English),
             app_state,
             left: None,
             right: None,
@@ -309,17 +325,16 @@ fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: 
 }
 
 fn maybe_print_star_reminder(state: &AppState) {
-    if !state.star_acknowledged {
-        eprintln!("Support BetterThanYou by starring https://github.com/NomaDamas/BetterThanYou . This reminder will keep appearing on startup until you choose the GitHub star action inside the app.");
+    if !state.star_acknowledged && !io::stdout().is_terminal() {
+        eprintln!("\u{2B50} Star one click = dev gets power-up!  https://github.com/NomaDamas/BetterThanYou");
     }
 }
 
 fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index: usize) -> Result<Option<usize>> {
-    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
-        return Ok(Some(initial_index.min(items.len().saturating_sub(1))));
+    match ui::select_menu(title, subtitle, items, initial_index) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(Some(initial_index.min(items.len().saturating_sub(1))))
     }
-
-    ui::select_menu(title, subtitle, items, initial_index)
 }
 
 
@@ -328,7 +343,9 @@ fn judge_index(judge: &JudgeCli) -> usize {
     match judge {
         JudgeCli::Auto => 0,
         JudgeCli::Openai => 1,
-        JudgeCli::Heuristic => 2,
+        JudgeCli::Anthropic => 2,
+        JudgeCli::Gemini => 3,
+        JudgeCli::Heuristic => 4,
     }
 }
 
@@ -350,9 +367,11 @@ fn ensure_openai_ready(state: &mut SessionState) -> Result<()> {
 
     match select_menu("OpenAI Key Required", &subtitle, &items, 0)? {
         Some(0) => {
-            if let Some(key) = prompt_optional("OpenAI API key > ")? {
-                state.app_state.openai_api_key = Some(key);
-                save_app_state(&state.app_state)?;
+            if let Some(key) = ui::text_input("OpenAI API Key", "Paste your API key (sk-...)", "", true)? {
+                if !key.is_empty() {
+                    state.app_state.openai_api_key = Some(key);
+                    save_app_state(&state.app_state)?;
+                }
             }
         }
         Some(1) => state.judge = JudgeCli::Auto,
@@ -375,6 +394,13 @@ async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Re
     options.axis_weights = parse_axis_weights(&args.axis_weights)?;
     if let Some(session_state) = state {
         options.openai_config.api_key = session_state.app_state.openai_api_key.clone();
+        // Set saved keys as env vars so lib.rs can find them
+        if let Some(key) = &session_state.app_state.anthropic_api_key {
+            std::env::set_var("ANTHROPIC_API_KEY", key);
+        }
+        if let Some(key) = &session_state.app_state.gemini_api_key {
+            std::env::set_var("GEMINI_API_KEY", key);
+        }
     }
 
     let result = analyze_portrait_battle(options).await?;
@@ -443,12 +469,13 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
         ];
         let items = vec![
             "Judge mode".to_string(),
-            "OpenAI model".to_string(),
+            "Model".to_string(),
             "Labels".to_string(),
             "Paste both from clipboard".to_string(),
             "Output directory".to_string(),
-            "OpenAI API key".to_string(),
+            "API keys".to_string(),
             "Aesthetic tuning".to_string(),
+            "Language".to_string(),
             "Back".to_string(),
         ];
         match select_menu("Settings", &subtitle, &items, 0)? {
@@ -456,12 +483,16 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 let judge_items = vec![
                     "Auto (recommended)".to_string(),
                     "OpenAI judge".to_string(),
+                    "Anthropic judge".to_string(),
+                    "Gemini judge".to_string(),
                     "Heuristic judge".to_string(),
                 ];
                 if let Some(choice) = select_menu("Judge Mode", &[], &judge_items, judge_index(&state.judge))? {
                     state.judge = match choice {
                         0 => JudgeCli::Auto,
                         1 => JudgeCli::Openai,
+                        2 => JudgeCli::Anthropic,
+                        3 => JudgeCli::Gemini,
                         _ => JudgeCli::Heuristic,
                     };
                     state.app_state.judge = Some(state.judge.clone());
@@ -469,15 +500,31 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 }
             }
             Some(1) => {
-                if let Some(model) = prompt_optional("OpenAI model > ")? {
-                    state.model = model;
+                let model_list: Vec<String> = match state.judge {
+                    JudgeCli::Anthropic => ANTHROPIC_VLM_MODELS.iter().map(|s| s.to_string()).collect(),
+                    JudgeCli::Gemini => GEMINI_VLM_MODELS.iter().map(|s| s.to_string()).collect(),
+                    _ => OPENAI_VLM_MODELS.iter().map(|s| s.to_string()).collect(),
+                };
+                let mut items_with_custom = model_list.clone();
+                items_with_custom.push("Custom (type model name)".to_string());
+                let current_index = model_list.iter().position(|m| m == &state.model).unwrap_or(0);
+                if let Some(choice) = select_menu("Select Model", &[], &items_with_custom, current_index)? {
+                    if choice < model_list.len() {
+                        state.model = model_list[choice].clone();
+                    } else if let Some(model) = ui::text_input("Custom Model", "Enter model name", "", false)? {
+                        if !model.is_empty() { state.model = model; }
+                    }
                     state.app_state.model = Some(state.model.clone());
                     save_app_state(&state.app_state)?;
                 }
             }
             Some(2) => {
-                state.left_label = prompt_optional("Left label (optional) > ")?;
-                state.right_label = prompt_optional("Right label (optional) > ")?;
+                if let Some(label) = ui::text_input("Left Label", "Optional name for the left portrait", state.left_label.as_deref().unwrap_or(""), false)? {
+                    state.left_label = if label.is_empty() { None } else { Some(label) };
+                }
+                if let Some(label) = ui::text_input("Right Label", "Optional name for the right portrait", state.right_label.as_deref().unwrap_or(""), false)? {
+                    state.right_label = if label.is_empty() { None } else { Some(label) };
+                }
             }
             Some(3) => {
                 let clip = read_clipboard_text()?;
@@ -488,30 +535,66 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 }
             }
             Some(4) => {
-                if let Some(out) = prompt_optional("Output dir > ")? {
-                    state.out_dir = PathBuf::from(out);
-                    state.app_state.out_dir = Some(state.out_dir.clone());
-                    save_app_state(&state.app_state)?;
+                if let Some(out) = ui::text_input("Output Directory", "Path where reports are saved", &state.out_dir.display().to_string(), false)? {
+                    if !out.is_empty() {
+                        state.out_dir = PathBuf::from(out);
+                        state.app_state.out_dir = Some(state.out_dir.clone());
+                        save_app_state(&state.app_state)?;
+                    }
                 }
             }
             Some(5) => {
+                let openai_status = if state.app_state.openai_api_key.is_some() { " \u{2714}" } else { "" };
+                let anthropic_status = if state.app_state.anthropic_api_key.is_some() { " \u{2714}" } else { "" };
+                let gemini_status = if state.app_state.gemini_api_key.is_some() { " \u{2714}" } else { "" };
                 let items = vec![
-                    "Set API key".to_string(),
-                    "Clear saved API key".to_string(),
+                    format!("Set OpenAI API key{}", openai_status),
+                    format!("Set Anthropic API key{}", anthropic_status),
+                    format!("Set Gemini API key{}", gemini_status),
+                    "Clear all saved keys".to_string(),
                     "Back".to_string(),
                 ];
-                match select_menu("OpenAI API Key", &[], &items, 0)? {
+                match select_menu("API Keys", &[], &items, 0)? {
                     Some(0) => {
-                        if let Some(key) = prompt_optional("OpenAI API key > ")? {
-                            state.app_state.openai_api_key = Some(key);
-                            save_app_state(&state.app_state)?;
+                        if let Some(key) = ui::text_input("OpenAI API Key", "Paste your OpenAI API key (sk-...)", "", true)? {
+                            if !key.is_empty() {
+                                state.app_state.openai_api_key = Some(key);
+                                save_app_state(&state.app_state)?;
+                            }
                         }
                     }
                     Some(1) => {
+                        if let Some(key) = ui::text_input("Anthropic API Key", "Paste your Anthropic API key", "", true)? {
+                            if !key.is_empty() {
+                                state.app_state.anthropic_api_key = Some(key);
+                                save_app_state(&state.app_state)?;
+                            }
+                        }
+                    }
+                    Some(2) => {
+                        if let Some(key) = ui::text_input("Gemini API Key", "Paste your Gemini API key", "", true)? {
+                            if !key.is_empty() {
+                                state.app_state.gemini_api_key = Some(key);
+                                save_app_state(&state.app_state)?;
+                            }
+                        }
+                    }
+                    Some(3) => {
                         state.app_state.openai_api_key = None;
+                        state.app_state.anthropic_api_key = None;
+                        state.app_state.gemini_api_key = None;
                         save_app_state(&state.app_state)?;
                     }
                     _ => {}
+                }
+            }
+            Some(7) => {
+                let lang_items = vec!["English".to_string(), "한국어".to_string(), "日本語".to_string()];
+                let current = match state.language { Language::English => 0, Language::Korean => 1, Language::Japanese => 2 };
+                if let Some(choice) = select_menu("Language", &[], &lang_items, current)? {
+                    state.language = match choice { 1 => Language::Korean, 2 => Language::Japanese, _ => Language::English };
+                    state.app_state.language = Some(state.language);
+                    save_app_state(&state.app_state)?;
                 }
             }
             Some(6) => loop {
@@ -528,10 +611,15 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 match select_menu("Aesthetic Tuning", &subtitle, &items, 0)? {
                     Some(index) if index < AXIS_DEFINITIONS.len() => {
                         let axis = &AXIS_DEFINITIONS[index];
-                        let value = prompt_optional(&format!("{} weight (current: {:.1}) > ", axis.label, get_axis_weight(&state.axis_weights, axis.key)))?;
-                        let Some(raw) = value else {
-                            continue;
-                        };
+                        let current = get_axis_weight(&state.axis_weights, axis.key);
+                        let value = ui::text_input(
+                            &format!("{} Weight", axis.label),
+                            "Enter a non-negative number (empty = keep current)",
+                            &format!("{:.1}", current),
+                            false,
+                        )?;
+                        let Some(raw) = value else { continue; };
+                        if raw.is_empty() { continue; }
                         let weight: f32 = raw.parse().map_err(|_| anyhow!("Invalid weight: {raw}"))?;
                         if !weight.is_finite() || weight < 0.0 {
                             bail!("Axis weight must be a finite non-negative number.");
@@ -555,8 +643,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
 
 fn run_share_menu(state: &mut SessionState) -> Result<()> {
     let Some(result) = state.last_result.as_ref() else {
-        println!("No latest result to share. Press Enter to continue.");
-        let _ = prompt_line("")?;
+        let _ = select_menu("Share", &["No latest result to share.".to_string()], &["Back".to_string()], 0)?;
         return Ok(());
     };
     let bundle = generate_share_bundle(result, &state.out_dir)?;
@@ -590,35 +677,57 @@ fn run_share_menu(state: &mut SessionState) -> Result<()> {
 async fn run_interactive_app() -> Result<()> {
     let mut state = SessionState::new();
 
+    // Show animated splash screen before main menu
+    if let Ok(star_pressed) = ui::splash_screen(state.app_state.star_acknowledged) {
+        if star_pressed {
+            let star_url = "https://github.com/NomaDamas/BetterThanYou";
+            let _ = Command::new("open").arg(star_url).status();
+            state.app_state.star_acknowledged = true;
+            let _ = save_app_state(&state.app_state);
+        }
+    }
+
     loop {
+        let lang = state.language;
         let mut items = vec![
-            "Start Battle".to_string(),
-            "Open Latest Report".to_string(),
-            "Share Latest Result".to_string(),
-            "Settings".to_string(),
+            t(lang, "start_battle").to_string(),
+            t(lang, "open_report").to_string(),
+            t(lang, "share_result").to_string(),
+            t(lang, "settings").to_string(),
         ];
         if !state.app_state.star_acknowledged {
-            items.push("Star BetterThanYou on GitHub".to_string());
+            items.push(t(lang, "star_github").to_string());
         }
-        items.push("Quit".to_string());
+        items.push(t(lang, "quit").to_string());
 
-        let subtitle = vec![
+        let mut subtitle = vec![
             "Drop two portraits, get a winner-first battle card, then decide what to do next.".to_string(),
             format!("Judge: {}", state.judge.as_str()),
             format!("Model: {}", state.model),
             format!("Output: {}", state.out_dir.display()),
         ];
+        if !state.app_state.star_acknowledged {
+            subtitle.push(String::new());
+            subtitle.push("\u{2B50} Star one click = dev gets power-up!  github.com/NomaDamas/BetterThanYou".to_string());
+        }
 
         match select_menu("BetterThanYou", &subtitle, &items, 0)? {
             Some(0) => {
-                if state.left.is_none() {
-                    state.left = Some(prompt_line("Drag or paste LEFT portrait path/URL/data URL: ")?);
+                if state.left.is_none() || state.right.is_none() {
+                    match ui::battle_input_screen(
+                        state.left.as_deref(),
+                        state.right.as_deref(),
+                    )? {
+                        Some((left, right)) => {
+                            state.left = Some(left);
+                            state.right = Some(right);
+                        }
+                        None => continue, // User pressed ESC
+                    }
                 }
-                if state.right.is_none() {
-                    state.right = Some(prompt_line("Drag or paste RIGHT portrait path/URL/data URL: ")?);
-                }
-                if matches!(state.judge, JudgeCli::Openai) {
-                    ensure_openai_ready(&mut state)?;
+                match state.judge {
+                    JudgeCli::Openai => ensure_openai_ready(&mut state)?,
+                    _ => {}
                 }
                 let args = BattleArgs {
                     left: state.left.clone(),
@@ -635,7 +744,25 @@ async fn run_interactive_app() -> Result<()> {
                     no_app: false,
                     axis_weights: state.axis_weights.iter().map(|(k, v)| format!("{}={}", k, v)).collect(),
                 };
-                let (result, artifacts) = battle_from_args(&args, Some(&state)).await?;
+                // Show loading animation while VLM analyzes
+                let done = Arc::new(AtomicBool::new(false));
+                let done_clone = done.clone();
+                let left_p = state.left.clone().unwrap_or_default();
+                let right_p = state.right.clone().unwrap_or_default();
+
+                // Animation in background thread
+                let anim = std::thread::spawn(move || {
+                    let _ = ui::battle_loading_screen(&left_p, &right_p, done_clone);
+                });
+
+                // Analysis on main async thread
+                let analysis_result = battle_from_args(&args, Some(&state)).await;
+
+                // Stop animation, wait for thread to finish
+                done.store(true, Ordering::Relaxed);
+                let _ = anim.join();
+
+                let (result, artifacts) = analysis_result?;
                 state.last_pair = Some((state.left.clone().unwrap_or_default(), state.right.clone().unwrap_or_default()));
                 state.last_json = Some(PathBuf::from(&artifacts.json_path));
                 state.last_html = Some(PathBuf::from(&artifacts.html_path));
@@ -643,18 +770,19 @@ async fn run_interactive_app() -> Result<()> {
                 ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None)?;
 
                 loop {
+                    let lang = state.language;
                     let mut next_items = vec![
-                        "Rematch Same Pair".to_string(),
-                        "Choose New Portraits".to_string(),
-                        "Share Latest Result".to_string(),
-                        "Open Latest Report".to_string(),
-                        "Settings".to_string(),
+                        t(lang, "rematch").to_string(),
+                        t(lang, "new_portraits").to_string(),
+                        t(lang, "share_result").to_string(),
+                        t(lang, "open_report").to_string(),
+                        t(lang, "settings").to_string(),
                     ];
                     if !state.app_state.star_acknowledged {
-                        next_items.push("Star BetterThanYou on GitHub".to_string());
+                        next_items.push(t(lang, "star_github").to_string());
                     }
-                    next_items.push("Back to Home".to_string());
-                    next_items.push("Quit".to_string());
+                    next_items.push(t(lang, "back").to_string());
+                    next_items.push(t(lang, "quit").to_string());
 
                     let next_subtitle = vec![
                         format!("Winner: {}", result.winner.label),
@@ -713,18 +841,17 @@ async fn main() -> Result<()> {
         None => {
             let app_state = load_app_state();
             maybe_print_star_reminder(&app_state);
-            if cli.left.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
-                && cli.right.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
-                && cli.left_label.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
-                && cli.right_label.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
+            let has_no_args = cli.left.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
+                && cli.right.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
+                && cli.left_label.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
+                && cli.right_label.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
                 && !cli.left_clipboard
                 && !cli.right_clipboard
                 && !cli.json
                 && !cli.open
-                && !cli.no_app
-                && io::stdin().is_terminal()
-                && io::stdout().is_terminal()
-            {
+                && !cli.no_app;
+
+            if has_no_args {
                 return run_interactive_app().await;
             }
 
