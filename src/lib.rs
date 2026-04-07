@@ -213,6 +213,7 @@ pub struct AnalyzeOptions {
     pub judge_mode: JudgeMode,
     pub openai_model: String,
     pub openai_config: OpenAiConfig,
+    pub axis_weights: Vec<(String, f32)>,
 }
 
 impl AnalyzeOptions {
@@ -225,6 +226,7 @@ impl AnalyzeOptions {
             judge_mode: JudgeMode::Auto,
             openai_model: DEFAULT_OPENAI_MODEL.to_string(),
             openai_config: OpenAiConfig::default(),
+            axis_weights: Vec::new(),
         }
     }
 }
@@ -465,7 +467,7 @@ fn compute_palette_mood(flat: &[Sample]) -> f32 {
     clamp((average(&warmth) + 1.0) * 0.25 + average(&vibrance) * 0.65, 0.0, 1.0)
 }
 
-fn score_portrait(portrait: &LoadedPortrait) -> ScoreBundle {
+fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]) -> ScoreBundle {
     let grid = sample_grid(&portrait.image, 48, 60);
     let flat = flatten_grid(&grid);
     let luminances: Vec<f32> = flat.iter().map(|s| s.luminance).collect();
@@ -489,7 +491,7 @@ fn score_portrait(portrait: &LoadedPortrait) -> ScoreBundle {
     };
 
     ScoreBundle {
-        total: round(compute_total_from_axes(&axes)),
+        total: round(compute_total_from_axes(&axes, axis_definitions)),
         axes,
         telemetry: Some(ScoreTelemetry {
             mirror_difference: round(mirror_difference),
@@ -500,10 +502,27 @@ fn score_portrait(portrait: &LoadedPortrait) -> ScoreBundle {
     }
 }
 
-fn compute_total_from_axes(axes: &AxisScores) -> f32 {
-    let weighted: f32 = AXIS_DEFINITIONS.iter().map(|axis| axes.get(axis.key) * axis.weight).sum();
-    let weights: f32 = AXIS_DEFINITIONS.iter().map(|axis| axis.weight).sum();
+fn compute_total_from_axes(axes: &AxisScores, axis_definitions: &[AxisDefinition]) -> f32 {
+    let weighted: f32 = axis_definitions.iter().map(|axis| axes.get(axis.key) * axis.weight).sum();
+    let weights: f32 = axis_definitions.iter().map(|axis| axis.weight).sum();
+    if weights <= 0.0 {
+        return 0.0;
+    }
     weighted / weights
+}
+
+fn axis_definitions_with_overrides(overrides: &[(String, f32)]) -> Result<Vec<AxisDefinition>> {
+    let mut definitions = AXIS_DEFINITIONS.to_vec();
+    for (key, weight) in overrides {
+        if !weight.is_finite() || *weight < 0.0 {
+            bail!("Invalid axis weight: {key}={weight} (must be a finite non-negative number)");
+        }
+        let Some(axis) = definitions.iter_mut().find(|axis| axis.key == key) else {
+            bail!("Unknown axis key: {key}");
+        };
+        axis.weight = *weight;
+    }
+    Ok(definitions)
 }
 
 fn build_axis_cards(left_scores: &ScoreBundle, right_scores: &ScoreBundle) -> Vec<AxisCard> {
@@ -748,6 +767,7 @@ async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model:
 }
 
 pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, openai_override: Option<OpenAiJudgeOutput>) -> Result<BattleResult> {
+    let axis_definitions = axis_definitions_with_overrides(&options.axis_weights)?;
     let left = load_portrait(&options.left_source, options.left_label.as_deref(), "left").await?;
     let right = load_portrait(&options.right_source, options.right_label.as_deref(), "right").await?;
 
@@ -765,13 +785,13 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
             Ok(vlm) => {
                 let left_axes = vlm.left_scores.clone();
                 let right_axes = vlm.right_scores.clone();
-                let left_scores = ScoreBundle { axes: left_axes.clone(), total: round(compute_total_from_axes(&left_axes)), telemetry: None };
-                let right_scores = ScoreBundle { axes: right_axes.clone(), total: round(compute_total_from_axes(&right_axes)), telemetry: None };
+                let left_scores = ScoreBundle { axes: left_axes.clone(), total: round(compute_total_from_axes(&left_axes, &axis_definitions)), telemetry: None };
+                let right_scores = ScoreBundle { axes: right_axes.clone(), total: round(compute_total_from_axes(&right_axes, &axis_definitions)), telemetry: None };
                 return Ok(build_result(&left, &right, left_scores, right_scores, vlm.sections, JudgeMode::Openai, &vlm.provider, Some(vlm.model), Some(&vlm.winner_id), None));
             }
             Err(error) if matches!(options.judge_mode, JudgeMode::Auto) => {
-                let left_scores = score_portrait(&left);
-                let right_scores = score_portrait(&right);
+                let left_scores = score_portrait(&left, &axis_definitions);
+                let right_scores = score_portrait(&right, &axis_definitions);
                 let axis_cards = build_axis_cards(&left_scores, &right_scores);
                 let winner_id = pick_winner(&left, &right, &left_scores, &right_scores, &axis_cards, None);
                 let winner = Winner {
@@ -789,8 +809,8 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
         }
     }
 
-    let left_scores = score_portrait(&left);
-    let right_scores = score_portrait(&right);
+    let left_scores = score_portrait(&left, &axis_definitions);
+    let right_scores = score_portrait(&right, &axis_definitions);
     let axis_cards = build_axis_cards(&left_scores, &right_scores);
     let winner_id = pick_winner(&left, &right, &left_scores, &right_scores, &axis_cards, None);
     let winner = Winner {
@@ -1199,6 +1219,7 @@ mod tests {
             judge_mode: JudgeMode::Heuristic,
             openai_model: DEFAULT_OPENAI_MODEL.into(),
             openai_config: OpenAiConfig::default(),
+            axis_weights: Vec::new(),
         }).await.unwrap();
 
         let result_b = analyze_portrait_battle(AnalyzeOptions {
@@ -1209,6 +1230,7 @@ mod tests {
             judge_mode: JudgeMode::Heuristic,
             openai_model: DEFAULT_OPENAI_MODEL.into(),
             openai_config: OpenAiConfig::default(),
+            axis_weights: Vec::new(),
         }).await.unwrap();
 
         assert_eq!(result_a.winner.id, result_b.winner.id);
@@ -1231,6 +1253,7 @@ mod tests {
             judge_mode: JudgeMode::Openai,
             openai_model: DEFAULT_OPENAI_MODEL.into(),
             openai_config: OpenAiConfig::default(),
+            axis_weights: Vec::new(),
         }, Some(OpenAiJudgeOutput {
             winner_id: "right".into(),
             left_scores: AxisScores { symmetry_harmony: 70.0, lighting_contrast: 61.0, sharpness_detail: 55.0, color_vitality: 52.0, composition_presence: 68.0, style_aura: 64.0 },
@@ -1253,20 +1276,45 @@ mod tests {
 
 const ANSI_RESET: &str = "\u{1b}[0m";
 const ANSI_BOLD: &str = "\u{1b}[1m";
-const ANSI_AMBER: &str = "\u{1b}[38;5;215m";
-const ANSI_CYAN: &str = "\u{1b}[38;5;80m";
-const ANSI_BLUE: &str = "\u{1b}[38;5;111m";
-const ANSI_DIM: &str = "\u{1b}[38;5;246m";
-const ANSI_GREEN: &str = "\u{1b}[38;5;120m";
-const ANSI_RED: &str = "\u{1b}[38;5;203m";
+const ANSI_AMBER: &str = "\u{1b}[38;2;255;214;107m";
+const ANSI_CYAN: &str = "\u{1b}[38;2;0;255;220m";
+const ANSI_BLUE: &str = "\u{1b}[38;2;100;180;255m";
+const ANSI_DIM: &str = "\u{1b}[38;2;120;120;150m";
+const ANSI_GREEN: &str = "\u{1b}[38;2;80;255;120m";
+const ANSI_RED: &str = "\u{1b}[38;2;255;70;70m";
+const ANSI_MAGENTA: &str = "\u{1b}[38;2;255;60;200m";
+const ANSI_PURPLE: &str = "\u{1b}[38;2;180;120;255m";
+const ANSI_GOLD: &str = "\u{1b}[38;2;255;215;0m";
+const ANSI_ORANGE: &str = "\u{1b}[38;2;255;143;66m";
+const ANSI_LIGHT: &str = "\u{1b}[38;2;220;220;240m";
 
 fn paint(text: &str, color: &str, enabled: bool) -> String {
     if enabled { format!("{}{}{}", color, text, ANSI_RESET) } else { text.to_string() }
 }
 
-fn meter(score: f32) -> String {
-    let filled = ((score / 5.0).round() as usize).max(1).min(20);
-    format!("{}{}", "█".repeat(filled), "░".repeat(20 - filled))
+fn game_meter(score: f32, width: usize) -> String {
+    let filled = ((score / 100.0) * width as f32).round() as usize;
+    let filled = filled.max(1).min(width);
+    let empty = width.saturating_sub(filled);
+    format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
+}
+
+fn score_rank_ansi(score: f32) -> (&'static str, &'static str) {
+    if score >= 95.0 { ("S+", ANSI_GOLD) }
+    else if score >= 90.0 { ("S", ANSI_AMBER) }
+    else if score >= 80.0 { ("A", ANSI_GREEN) }
+    else if score >= 70.0 { ("B", ANSI_CYAN) }
+    else if score >= 60.0 { ("C", ANSI_ORANGE) }
+    else if score >= 50.0 { ("D", ANSI_RED) }
+    else { ("F", ANSI_RED) }
+}
+
+fn meter_color_ansi(score: f32) -> &'static str {
+    if score >= 90.0 { ANSI_GOLD }
+    else if score >= 75.0 { ANSI_GREEN }
+    else if score >= 60.0 { ANSI_CYAN }
+    else if score >= 45.0 { ANSI_ORANGE }
+    else { ANSI_RED }
 }
 
 fn pad_center(value: &str, width: usize) -> String {
@@ -1280,89 +1328,192 @@ fn boxed_title(title: &str, color: &str, width: usize, enabled: bool) -> [String
     let inner = width.saturating_sub(4);
     let centered = pad_center(title, inner);
     [
-        paint(&format!("╔{}╗", "═".repeat(inner)), color, enabled),
-        paint(&format!("║ {} ║", &centered[1..centered.len().saturating_sub(1)]), color, enabled),
-        paint(&format!("╚{}╝", "═".repeat(inner)), color, enabled),
+        paint(&format!("\u{2554}{}\u{2557}", "\u{2550}".repeat(inner)), color, enabled),
+        paint(&format!("\u{2551} {} \u{2551}", &centered[1..centered.len().saturating_sub(1)]), color, enabled),
+        paint(&format!("\u{255A}{}\u{255D}", "\u{2550}".repeat(inner)), color, enabled),
     ]
 }
 
-
-fn info_panel(title: &str, body: &[String], width: usize, color: &str, enabled: bool) -> Vec<String> {
+fn game_panel(title: &str, body: &[String], width: usize, border_color: &str, enabled: bool) -> Vec<String> {
     let inner = width.saturating_sub(4);
     let mut lines = Vec::new();
-    lines.push(paint(&format!("┌{}┐", "─".repeat(inner)), color, enabled));
-    lines.push(paint(&format!("│ {:<width$} │", title, width = inner - 2), color, enabled));
-    lines.push(paint(&format!("├{}┤", "─".repeat(inner)), color, enabled));
+    let decorated_title = format!("\u{25C6} {} \u{25C6}", title);
+    lines.push(paint(&format!("\u{250C}{}\u{2510}", "\u{2500}".repeat(inner)), border_color, enabled));
+    lines.push(paint(&format!("\u{2502} {:<width$} \u{2502}", decorated_title, width = inner - 2), border_color, enabled));
+    lines.push(paint(&format!("\u{251C}{}\u{2524}", "\u{2500}".repeat(inner)), border_color, enabled));
     for line in body {
         let clipped = if line.chars().count() > inner - 2 { line.chars().take(inner - 2).collect::<String>() } else { line.clone() };
-        lines.push(format!("│ {:<width$} │", clipped, width = inner - 2));
+        lines.push(format!("\u{2502} {:<width$} \u{2502}", clipped, width = inner - 2));
     }
-    lines.push(paint(&format!("└{}┘", "─".repeat(inner)), color, enabled));
+    lines.push(paint(&format!("\u{2514}{}\u{2518}", "\u{2500}".repeat(inner)), border_color, enabled));
     lines
 }
 
 fn signed_gap(card: &AxisCard, winner_id: &str) -> (String, &'static str) {
     if card.leader == "tie" {
-        return ("TIE ".to_string(), ANSI_CYAN);
+        return (" TIE ".to_string(), ANSI_CYAN);
     }
     let sign = if card.leader == winner_id { "+" } else { "-" };
     let color = if card.leader == winner_id { ANSI_GREEN } else { ANSI_RED };
     (format!("{:>5}", format!("{}{:0.1}", sign, card.diff)), color)
 }
 
+fn vs_banner(left_label: &str, right_label: &str, left_score: f32, right_score: f32, width: usize, enabled: bool) -> Vec<String> {
+    let inner = width.saturating_sub(4);
+    let (left_rank, left_rank_color) = score_rank_ansi(left_score);
+    let (right_rank, right_rank_color) = score_rank_ansi(right_score);
+
+    let vs_line = format!(
+        "{} [{:.1}] {}  \u{2694} VS \u{2694}  {} [{:.1}] {}",
+        left_label.to_uppercase(), left_score, left_rank,
+        right_label.to_uppercase(), right_score, right_rank
+    );
+    let centered_vs = pad_center(&vs_line, inner);
+
+    let mut lines = Vec::new();
+    lines.push(paint(&format!("\u{2554}{}\u{2557}", "\u{2550}".repeat(inner)), ANSI_MAGENTA, enabled));
+    if enabled {
+        let raw_vs = format!(
+            "{} [{}] {}  {} \u{2694} VS \u{2694} {}  {} [{}] {}",
+            paint(
+                &left_label.to_uppercase(),
+                ANSI_ORANGE,
+                true,
+            ),
+            paint(&format!("{:.1}", left_score), ANSI_LIGHT, true),
+            paint(left_rank, left_rank_color, true),
+            ANSI_MAGENTA,
+            ANSI_RESET,
+            paint(
+                &right_label.to_uppercase(),
+                ANSI_BLUE,
+                true,
+            ),
+            paint(&format!("{:.1}", right_score), ANSI_LIGHT, true),
+            paint(right_rank, right_rank_color, true),
+        );
+        let padded = pad_center(&raw_vs, inner + 100);
+        lines.push(format!("{mag}\u{2551}{rst}{content}{mag}\u{2551}{rst}", mag = ANSI_MAGENTA, rst = ANSI_RESET, content = padded));
+    } else {
+        lines.push(format!("\u{2551}{}\u{2551}", centered_vs));
+    }
+    lines.push(paint(&format!("\u{255A}{}\u{255D}", "\u{2550}".repeat(inner)), ANSI_MAGENTA, enabled));
+    lines
+}
+
 pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts, color: bool) -> String {
     let width = 92;
-    let winner_color = if result.winner.id == "left" { ANSI_AMBER } else { ANSI_BLUE };
     let mut lines = Vec::new();
-    lines.extend(boxed_title("BETTERTHANYOU // CLI PORTRAIT BATTLE", ANSI_BOLD, width, color));
-    lines.extend(boxed_title(&format!("WINNER // {}", result.winner.label.to_uppercase()), winner_color, width, color));
 
+    // ── Logo banner ────────────────────────────────────────────────
+    let logo_lines = [
+        r" ____       _   _           _____ _                __   __",
+        r"| __ )  ___| |_| |_ ___ _ _|_   _| |__   __ _ _ _  \ \ / /__  _   _",
+        r"|  _ \ / _ \ __| __/ _ \ '__|| | | '_ \ / _` | '_ \  \ V / _ \| | | |",
+        r"| |_) |  __/ |_| ||  __/ |  | | | | | | (_| | | | |  | | (_) | |_| |",
+        r"|____/ \___|\__|\__\___|_|  |_| |_| |_|\__,_|_| |_|  |_|\___/ \__,_|",
+    ];
+    let gradient_colors = [
+        "\u{1b}[38;2;255;60;200m",
+        "\u{1b}[38;2;230;80;220m",
+        "\u{1b}[38;2;200;120;255m",
+        "\u{1b}[38;2;150;160;255m",
+        "\u{1b}[38;2;100;200;255m",
+    ];
+    for (i, logo) in logo_lines.iter().enumerate() {
+        lines.push(paint(logo, gradient_colors[i], color));
+    }
+    lines.push(paint("                        C L I   P O R T R A I T   B A T T L E", ANSI_CYAN, color));
+    lines.push(String::new());
+
+    // ── VS banner ──────────────────────────────────────────────────
+    lines.extend(vs_banner(
+        &result.inputs.left.label,
+        &result.inputs.right.label,
+        result.scores.left.total,
+        result.scores.right.total,
+        width,
+        color,
+    ));
+
+    // ── Winner announcement ────────────────────────────────────────
+    let winner_text = format!(
+        "\u{1F3C6} WINNER: {}  \u{25B2} +{:.1} margin{}",
+        result.winner.label.to_uppercase(),
+        result.winner.margin,
+        if result.winner.decisive { "  DECISIVE!" } else { "" }
+    );
+    lines.extend(boxed_title(&winner_text, ANSI_GOLD, width, color));
+    lines.push(String::new());
+
+    // ── Summary ────────────────────────────────────────────────────
     let judge_line = if let Some(model) = &result.engine.model {
-        format!("Judge: {} via {}", result.engine.judge_mode, model)
+        format!("\u{2696}  Judge: {} via {}", result.engine.judge_mode, model)
     } else {
-        format!("Judge: {}", result.engine.judge_mode)
+        format!("\u{2696}  Judge: {}", result.engine.judge_mode)
     };
-
     let summary = vec![
-        format!("Left total   : {:.1}", result.scores.left.total),
-        format!("Right total  : {:.1}", result.scores.right.total),
-        format!("Margin       : {:.1} points", result.winner.margin),
+        format!("\u{1F7E0} Left   : {} {:.1}", result.inputs.left.label, result.scores.left.total),
+        format!("\u{1F535} Right  : {} {:.1}", result.inputs.right.label, result.scores.right.total),
+        format!("\u{1F4CA} Margin : {:.1} points", result.winner.margin),
         judge_line,
     ];
-    lines.extend(info_panel("SUMMARY", &summary, width, ANSI_DIM, color));
+    lines.extend(game_panel("SCOREBOARD", &summary, width, ANSI_CYAN, color));
     lines.push(String::new());
-    lines.push(paint("ABILITY COMPARISON", ANSI_CYAN, color));
-    lines.push(paint("Axis                      Left                         Right                        Gap", ANSI_DIM, color));
+
+    // ── Ability stats ──────────────────────────────────────────────
+    lines.push(paint("\u{25C6} ABILITY STATS \u{25C6}", ANSI_ORANGE, color));
+    lines.push(String::new());
     for card in &result.axis_cards {
         let (gap, gap_color) = signed_gap(card, &result.winner.id);
         let gap_text = paint(&gap, gap_color, color);
+
         lines.push(format!(
-            "{:<24} {:>5} {} | {:>5} {}  {}",
-            card.label,
-            format!("{:.1}", card.left),
-            meter(card.left),
-            format!("{:.1}", card.right),
-            meter(card.right),
+            "  {}  {}",
+            paint(&format!("{:<20}", card.label), ANSI_AMBER, color),
             gap_text
         ));
+
+        let left_meter = paint(&game_meter(card.left, 16), meter_color_ansi(card.left), color);
+        let (left_rank, left_rc) = score_rank_ansi(card.left);
+        lines.push(format!(
+            "    {} {} {} {}",
+            paint("L", ANSI_ORANGE, color),
+            left_meter,
+            format!("{:.1}", card.left),
+            paint(left_rank, left_rc, color)
+        ));
+
+        let right_meter = paint(&game_meter(card.right, 16), meter_color_ansi(card.right), color);
+        let (right_rank, right_rc) = score_rank_ansi(card.right);
+        lines.push(format!(
+            "    {} {} {} {}",
+            paint("R", ANSI_BLUE, color),
+            right_meter,
+            format!("{:.1}", card.right),
+            paint(right_rank, right_rc, color)
+        ));
+        lines.push(String::new());
     }
-    lines.push(String::new());
+
+    // ── Analysis ───────────────────────────────────────────────────
     let analysis = vec![
-        result.sections.overall_take.clone(),
+        format!("\u{1F4AC} {}", result.sections.overall_take),
         String::new(),
-        format!("Why: {}", result.sections.why_this_won),
+        format!("\u{1F3C6} Why: {}", result.sections.why_this_won),
         String::new(),
-        format!("Notes: {}", result.sections.model_jury_notes),
+        format!("\u{1F4DD} Notes: {}", result.sections.model_jury_notes),
     ];
-    lines.extend(info_panel("ANALYSIS", &analysis, width, ANSI_CYAN, color));
+    lines.extend(game_panel("JUDGE ANALYSIS", &analysis, width, ANSI_PURPLE, color));
     lines.push(String::new());
+
+    // ── Files ──────────────────────────────────────────────────────
     let files = vec![
-        format!("HTML report : {}", artifacts.html_path),
-        format!("JSON result : {}", artifacts.json_path),
+        format!("\u{1F4C4} HTML report : {}", artifacts.html_path),
+        format!("\u{1F4C4} JSON result : {}", artifacts.json_path),
     ];
-    lines.extend(info_panel("SAVE FILES", &files, width, ANSI_DIM, color));
-    lines.join("
-")
+    lines.extend(game_panel("SAVED ARTIFACTS", &files, width, ANSI_DIM, color));
+    lines.join("\n")
 }
 
 pub fn render_report_summary(report: &SavedArtifacts, color: bool) -> String {

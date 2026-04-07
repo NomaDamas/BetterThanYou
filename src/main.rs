@@ -5,11 +5,12 @@ use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
     read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
-    render_terminal_battle, save_battle_artifacts, write_clipboard_text, AnalyzeOptions, BattleResult, JudgeMode,
+    render_terminal_battle, save_battle_artifacts, write_clipboard_text, AnalyzeOptions, AXIS_DEFINITIONS,
+    BattleResult, JudgeMode,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -70,6 +71,8 @@ struct Cli {
     open: bool,
     #[arg(long)]
     no_app: bool,
+    #[arg(long = "axis-weight", value_name = "KEY=WEIGHT")]
+    axis_weights: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -103,6 +106,8 @@ struct BattleArgs {
     open: bool,
     #[arg(long)]
     no_app: bool,
+    #[arg(long = "axis-weight", value_name = "KEY=WEIGHT")]
+    axis_weights: Vec<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -130,6 +135,8 @@ struct AppState {
     judge: Option<JudgeCli>,
     model: Option<String>,
     out_dir: Option<PathBuf>,
+    #[serde(default)]
+    axis_weights: Vec<(String, f32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -142,6 +149,7 @@ struct SessionState {
     judge: JudgeCli,
     model: String,
     out_dir: PathBuf,
+    axis_weights: Vec<(String, f32)>,
     last_json: Option<PathBuf>,
     last_html: Option<PathBuf>,
     last_result: Option<BattleResult>,
@@ -155,6 +163,7 @@ impl SessionState {
             judge: app_state.judge.clone().unwrap_or(JudgeCli::Auto),
             model: app_state.model.clone().unwrap_or_else(|| "gpt-4.1-mini".to_string()),
             out_dir: app_state.out_dir.clone().unwrap_or_else(default_reports_dir),
+            axis_weights: app_state.axis_weights.clone(),
             app_state,
             left: None,
             right: None,
@@ -215,6 +224,50 @@ fn read_piped_lines() -> Result<Vec<String>> {
         .filter(|line| !line.is_empty())
         .map(str::to_string)
         .collect())
+}
+
+fn resolve_axis_weight(entry: &str) -> Result<(String, f32), String> {
+    let (key, value) = entry
+        .split_once('=')
+        .ok_or_else(|| format!("axis-weight must be KEY=WEIGHT: {entry}"))?;
+    let weight = value.parse::<f32>().map_err(|_| format!("invalid axis weight value for {}: {value}", key))?;
+    if !weight.is_finite() || weight < 0.0 {
+        return Err(format!("axis-weight must be finite and non-negative for {key}"));
+    }
+    if !AXIS_DEFINITIONS.iter().any(|axis| axis.key == key) {
+        return Err(format!("unknown axis key: {key}"));
+    }
+    Ok((key.to_string(), weight))
+}
+
+fn get_axis_weight(overrides: &[(String, f32)], key: &str) -> f32 {
+    overrides
+        .iter()
+        .find(|(axis_key, _)| axis_key == key)
+        .map(|(_, weight)| *weight)
+        .or_else(|| {
+            AXIS_DEFINITIONS
+                .iter()
+                .find(|axis| axis.key == key)
+                .map(|axis| axis.weight)
+        })
+        .unwrap_or(0.0)
+}
+
+fn parse_axis_weights(raw: &[String]) -> Result<Vec<(String, f32)>> {
+    let mut overrides = Vec::new();
+    for item in raw {
+        overrides.push(resolve_axis_weight(item).map_err(|e| anyhow!(e))?);
+    }
+    Ok(overrides)
+}
+
+fn set_axis_weight(overrides: &mut Vec<(String, f32)>, key: &str, weight: f32) {
+    if let Some(existing) = overrides.iter_mut().find(|(axis_key, _)| axis_key == key) {
+        existing.1 = weight;
+        return;
+    }
+    overrides.push((key.to_string(), weight));
 }
 
 fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: bool, right_clipboard: bool) -> Result<(String, String)> {
@@ -319,6 +372,7 @@ async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Re
     options.right_label = args.right_label.clone();
     options.judge_mode = args.judge.clone().into();
     options.openai_model = args.model.clone();
+    options.axis_weights = parse_axis_weights(&args.axis_weights)?;
     if let Some(session_state) = state {
         options.openai_config.api_key = session_state.app_state.openai_api_key.clone();
     }
@@ -394,6 +448,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
             "Paste both from clipboard".to_string(),
             "Output directory".to_string(),
             "OpenAI API key".to_string(),
+            "Aesthetic tuning".to_string(),
             "Back".to_string(),
         ];
         match select_menu("Settings", &subtitle, &items, 0)? {
@@ -459,6 +514,40 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     _ => {}
                 }
             }
+            Some(6) => loop {
+                let subtitle = vec![
+                    "Aesthetic tuning changes only affect total-score weighting.".to_string(),
+                    "Set axis weight with 0+ numbers. Empty keeps previous value.".to_string(),
+                ];
+                let mut items: Vec<String> = AXIS_DEFINITIONS
+                    .iter()
+                    .map(|axis| format!("{} ({:.1})", axis.label, get_axis_weight(&state.axis_weights, axis.key)))
+                    .collect();
+                items.push("Reset to defaults".to_string());
+                items.push("Back".to_string());
+                match select_menu("Aesthetic Tuning", &subtitle, &items, 0)? {
+                    Some(index) if index < AXIS_DEFINITIONS.len() => {
+                        let axis = &AXIS_DEFINITIONS[index];
+                        let value = prompt_optional(&format!("{} weight (current: {:.1}) > ", axis.label, get_axis_weight(&state.axis_weights, axis.key)))?;
+                        let Some(raw) = value else {
+                            continue;
+                        };
+                        let weight: f32 = raw.parse().map_err(|_| anyhow!("Invalid weight: {raw}"))?;
+                        if !weight.is_finite() || weight < 0.0 {
+                            bail!("Axis weight must be a finite non-negative number.");
+                        }
+                        set_axis_weight(&mut state.axis_weights, axis.key, weight);
+                        state.app_state.axis_weights = state.axis_weights.clone();
+                        save_app_state(&state.app_state)?;
+                    }
+                    Some(index) if index == AXIS_DEFINITIONS.len() => {
+                        state.axis_weights.clear();
+                        state.app_state.axis_weights.clear();
+                        save_app_state(&state.app_state)?;
+                    }
+                    _ => break,
+                }
+            },
             _ => return Ok(()),
         }
     }
@@ -544,6 +633,7 @@ async fn run_interactive_app() -> Result<()> {
                     json: false,
                     open: false,
                     no_app: false,
+                    axis_weights: state.axis_weights.iter().map(|(k, v)| format!("{}={}", k, v)).collect(),
                 };
                 let (result, artifacts) = battle_from_args(&args, Some(&state)).await?;
                 state.last_pair = Some((state.left.clone().unwrap_or_default(), state.right.clone().unwrap_or_default()));
@@ -623,14 +713,15 @@ async fn main() -> Result<()> {
         None => {
             let app_state = load_app_state();
             maybe_print_star_reminder(&app_state);
-            if cli.left.is_none()
-                && cli.right.is_none()
-                && cli.left_label.is_none()
-                && cli.right_label.is_none()
+            if cli.left.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
+                && cli.right.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
+                && cli.left_label.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
+                && cli.right_label.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true)
                 && !cli.left_clipboard
                 && !cli.right_clipboard
                 && !cli.json
                 && !cli.open
+                && !cli.no_app
                 && io::stdin().is_terminal()
                 && io::stdout().is_terminal()
             {
@@ -638,10 +729,22 @@ async fn main() -> Result<()> {
             }
 
             let args = BattleArgs {
-                left: cli.left,
-                right: cli.right,
-                left_label: cli.left_label,
-                right_label: cli.right_label,
+                left: cli.left.and_then(|value| {
+                    let trimmed = value.trim().to_string();
+                    (!trimmed.is_empty()).then_some(trimmed)
+                }),
+                right: cli.right.and_then(|value| {
+                    let trimmed = value.trim().to_string();
+                    (!trimmed.is_empty()).then_some(trimmed)
+                }),
+                left_label: cli.left_label.and_then(|value| {
+                    let trimmed = value.trim().to_string();
+                    (!trimmed.is_empty()).then_some(trimmed)
+                }),
+                right_label: cli.right_label.and_then(|value| {
+                    let trimmed = value.trim().to_string();
+                    (!trimmed.is_empty()).then_some(trimmed)
+                }),
                 out_dir: cli.out_dir,
                 left_clipboard: cli.left_clipboard,
                 right_clipboard: cli.right_clipboard,
@@ -650,6 +753,7 @@ async fn main() -> Result<()> {
                 json: cli.json,
                 open: cli.open,
                 no_app: cli.no_app,
+                axis_weights: cli.axis_weights,
             };
             run_battle(args).await
         }
