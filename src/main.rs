@@ -71,7 +71,7 @@ struct Cli {
     right_clipboard: bool,
     #[arg(long, value_enum, default_value = "auto")]
     judge: JudgeCli,
-    #[arg(long, default_value = "gpt-4.1-mini")]
+    #[arg(long, default_value = "gpt-5.4-mini")]
     model: String,
     #[arg(long)]
     json: bool,
@@ -106,7 +106,7 @@ struct BattleArgs {
     right_clipboard: bool,
     #[arg(long, value_enum, default_value = "auto")]
     judge: JudgeCli,
-    #[arg(long, default_value = "gpt-4.1-mini")]
+    #[arg(long, default_value = "gpt-5.4-mini")]
     model: String,
     #[arg(long)]
     json: bool,
@@ -176,7 +176,7 @@ impl SessionState {
         let app_state = load_app_state();
         Self {
             judge: app_state.judge.clone().unwrap_or(JudgeCli::Auto),
-            model: app_state.model.clone().unwrap_or_else(|| "gpt-4.1-mini".to_string()),
+            model: app_state.model.clone().unwrap_or_else(|| "gpt-5.4-mini".to_string()),
             out_dir: app_state.out_dir.clone().unwrap_or_else(default_reports_dir),
             axis_weights: app_state.axis_weights.clone(),
             language: app_state.language.unwrap_or(Language::English),
@@ -744,30 +744,66 @@ async fn run_interactive_app() -> Result<()> {
                     no_app: false,
                     axis_weights: state.axis_weights.iter().map(|(k, v)| format!("{}={}", k, v)).collect(),
                 };
-                // Show loading animation while VLM analyzes
+                // Set API keys as env vars
+                if let Some(key) = &state.app_state.anthropic_api_key {
+                    std::env::set_var("ANTHROPIC_API_KEY", key);
+                }
+                if let Some(key) = &state.app_state.gemini_api_key {
+                    std::env::set_var("GEMINI_API_KEY", key);
+                }
+
+                // Show a simple "analyzing" screen, run analysis, then show result
+                // Use a background thread for animation + main thread for async analysis
                 let done = Arc::new(AtomicBool::new(false));
-                let done_clone = done.clone();
+                let done_anim = done.clone();
                 let left_p = state.left.clone().unwrap_or_default();
                 let right_p = state.right.clone().unwrap_or_default();
 
-                // Animation in background thread
-                let anim = std::thread::spawn(move || {
-                    let _ = ui::battle_loading_screen(&left_p, &right_p, done_clone);
+                // Start animation in background OS thread (NOT tokio thread)
+                let anim_thread = std::thread::spawn(move || {
+                    let _ = ui::battle_loading_screen(&left_p, &right_p, done_anim);
                 });
 
-                // Analysis on main async thread
+                // Run analysis on main async thread
                 let analysis_result = battle_from_args(&args, Some(&state)).await;
 
-                // Stop animation, wait for thread to finish
+                // Stop animation
                 done.store(true, Ordering::Relaxed);
-                let _ = anim.join();
+                // Wait for animation thread to fully exit and restore terminal
+                let _ = anim_thread.join();
+                // Ensure terminal is fully reset after animation thread's TuiSession drop
+                let _ = crossterm::terminal::disable_raw_mode();
+                let _ = crossterm::execute!(
+                    io::stdout(),
+                    crossterm::terminal::LeaveAlternateScreen,
+                    crossterm::cursor::Show
+                );
+                // Brief pause to let terminal settle after mode transitions
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                // Drain any stale events from the loading animation
+                let _ = crossterm::terminal::enable_raw_mode();
+                while crossterm::event::poll(std::time::Duration::from_millis(1)).unwrap_or(false) {
+                    let _ = crossterm::event::read();
+                }
+                let _ = crossterm::terminal::disable_raw_mode();
 
-                let (result, artifacts) = analysis_result?;
+                let (result, artifacts) = match analysis_result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        let msg = format!("{}", e);
+                        let _ = select_menu("Battle Failed", &[msg], &["Back".to_string()], 0);
+                        state.left = None;
+                        state.right = None;
+                        continue;
+                    }
+                };
                 state.last_pair = Some((state.left.clone().unwrap_or_default(), state.right.clone().unwrap_or_default()));
                 state.last_json = Some(PathBuf::from(&artifacts.json_path));
                 state.last_html = Some(PathBuf::from(&artifacts.html_path));
                 state.last_result = Some(result.clone());
-                ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None)?;
+                if let Err(_) = ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None) {
+                    // TUI error - continue to menu anyway
+                }
 
                 loop {
                     let lang = state.language;

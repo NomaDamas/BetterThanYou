@@ -217,6 +217,11 @@ pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_i
     let mut state = ListState::default();
     state.select(Some(selected));
 
+    // Drain any buffered input events from prior screens
+    while event::poll(Duration::from_millis(1))? {
+        let _ = event::read()?;
+    }
+
     loop {
         session.terminal.draw(|frame| {
             let area = frame.area();
@@ -422,6 +427,11 @@ fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
 pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _footer_lines: &[String], on_open: Option<fn(&Path) -> Result<()>>) -> Result<()> {
     let mut session = TuiSession::new()?;
 
+    // Drain any buffered input events from prior screens (e.g. loading animation)
+    while event::poll(Duration::from_millis(1))? {
+        let _ = event::read()?;
+    }
+
     loop {
         session.terminal.draw(|frame| {
             let area = frame.area();
@@ -567,7 +577,7 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
             .block(Block::default()
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
-            frame.render_widget(footer, layout[4]);
+            frame.render_widget(footer, layout[3]);
         })?;
 
         if let Event::Key(key) = event::read()? {
@@ -700,7 +710,12 @@ pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Re
                 }
             }
             Event::Paste(text) => {
-                input.push_str(&text.replace('\n', "").replace('\r', ""));
+                let cleaned = text.replace('\n', "").replace('\r', "").trim().to_string();
+                if cleaned.starts_with('/') || cleaned.starts_with('~') || cleaned.starts_with("http") || cleaned.starts_with("data:") {
+                    input = cleaned;
+                } else {
+                    input.push_str(&cleaned);
+                }
             }
             _ => {}
         }
@@ -708,26 +723,37 @@ pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Re
 }
 
 fn clean_path(input: &str) -> String {
-    input.trim().trim_matches('\'').trim_matches('"').trim().to_string()
+    let s = input.trim()
+        .trim_matches('\'')
+        .trim_matches('"')
+        .trim();
+    // macOS drag-and-drop escapes spaces with backslash: /path/to/my\ file.jpg
+    s.replace("\\ ", " ")
+        .replace("\\(", "(")
+        .replace("\\)", ")")
+        .replace("\\[", "[")
+        .replace("\\]", "]")
 }
 
 fn try_load_preview(path: &str, picker: &Picker) -> Option<StatefulProtocol> {
     let cleaned = clean_path(path);
     if cleaned.is_empty() { return None; }
-    let p = Path::new(&cleaned);
+    let p = std::path::Path::new(&cleaned);
     if !p.exists() { return None; }
     let img = image::open(p).ok()?;
-    Some(picker.new_resize_protocol(img))
+    // Resize to reasonable thumbnail for terminal display
+    let thumb = img.resize(400, 400, image::imageops::FilterType::Triangle);
+    Some(picker.new_resize_protocol(thumb))
 }
 
 pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&str>) -> Result<Option<(String, String)>> {
+    // Detect terminal image protocol BEFORE entering alternate screen
+    let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+
     let mut session = TuiSession::new()?;
     let mut left_input = existing_left.unwrap_or("").to_string();
     let mut right_input = existing_right.unwrap_or("").to_string();
     let mut active_side: usize = 0;
-
-    // Image preview state
-    let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
     let mut left_preview: Option<StatefulProtocol> = None;
     let mut right_preview: Option<StatefulProtocol> = None;
     let mut left_prev_path = String::new();
@@ -815,18 +841,30 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     let img_widget = StatefulImage::new();
                     frame.render_stateful_widget(img_widget, inner_layout[0], proto);
                 } else {
-                    let placeholder_text = if input.trim().is_empty() {
-                        "Drop image here"
-                    } else if Path::new(&clean_path(input)).exists() {
-                        "Loading..."
+                    let cleaned = clean_path(input);
+                    let file_exists = !cleaned.is_empty() && Path::new(&cleaned).exists();
+                    let ph_lines = if input.trim().is_empty() {
+                        vec![
+                            Line::from(""),
+                            Line::from(Span::styled("Drag & drop or paste", Style::default().fg(DIM_TEXT))),
+                            Line::from(Span::styled("an image file here", Style::default().fg(DIM_TEXT))),
+                        ]
+                    } else if file_exists {
+                        vec![
+                            Line::from(Span::styled("\u{2714} File found", Style::default().fg(NEON_GREEN))),
+                            Line::from(Span::styled("(preview not supported", Style::default().fg(DIM_TEXT))),
+                            Line::from(Span::styled(" in this terminal)", Style::default().fg(DIM_TEXT))),
+                        ]
                     } else {
-                        "No preview (URL or invalid path)"
+                        vec![
+                            Line::from(Span::styled("Path not found:", Style::default().fg(NEON_RED))),
+                            Line::from(Span::styled(
+                                if cleaned.len() > 30 { format!("...{}", &cleaned[cleaned.len()-28..]) } else { cleaned },
+                                Style::default().fg(DIM_TEXT),
+                            )),
+                        ]
                     };
-                    let ph = Paragraph::new(vec![
-                        Line::from(""),
-                        Line::from(""),
-                        Line::from(Span::styled(placeholder_text, Style::default().fg(DIM_TEXT))),
-                    ])
+                    let ph = Paragraph::new(ph_lines)
                     .alignment(Alignment::Center);
                     frame.render_widget(ph, inner_layout[0]);
                 }
@@ -899,11 +937,18 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
             }
             // Handle paste events (multi-char, e.g. drag-and-drop paths)
             Event::Paste(text) => {
-                let cleaned = text.replace('\n', "").replace('\r', "");
+                let cleaned = text.replace('\n', "").replace('\r', "").trim().to_string();
+                // If paste looks like a file path or URL, replace instead of append
+                let is_path = cleaned.starts_with('/')
+                    || cleaned.starts_with('~')
+                    || cleaned.starts_with("http")
+                    || cleaned.starts_with("data:")
+                    || cleaned.starts_with('\'')
+                    || cleaned.starts_with('"');
                 if active_side == 0 {
-                    left_input.push_str(&cleaned);
+                    if is_path { left_input = cleaned; } else { left_input.push_str(&cleaned); }
                 } else {
-                    right_input.push_str(&cleaned);
+                    if is_path { right_input = cleaned; } else { right_input.push_str(&cleaned); }
                 }
             }
             _ => {}
@@ -932,16 +977,12 @@ const BATTLE_PHRASES: [&str; 8] = [
 /// Shows animated loading screen while VLM analysis runs.
 /// Call `done.store(true, Ordering::Relaxed)` from another thread to stop.
 pub fn battle_loading_screen(
-    left_path: &str,
-    right_path: &str,
+    _left_path: &str,
+    _right_path: &str,
     done: Arc<AtomicBool>,
 ) -> Result<()> {
     let mut session = TuiSession::new()?;
     let mut frame: u64 = 0;
-
-    let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
-    let mut left_proto = try_load_preview(left_path, &picker);
-    let mut right_proto = try_load_preview(right_path, &picker);
 
     while event::poll(Duration::from_millis(1))? {
         let _ = event::read()?;
@@ -957,9 +998,11 @@ pub fn battle_loading_screen(
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
+                    Constraint::Min(5),     // top spacer
                     Constraint::Length(3),   // title
-                    Constraint::Min(8),      // images + VS
-                    Constraint::Length(5),    // spinner + status
+                    Constraint::Length(11),  // VS animation
+                    Constraint::Length(5),   // spinner + status
+                    Constraint::Min(3),     // bottom spacer
                 ])
                 .split(area);
 
@@ -976,30 +1019,27 @@ pub fn battle_loading_screen(
             )))
             .alignment(Alignment::Center)
             .block(game_block("ANALYZING", title_color));
-            frame_ref.render_widget(title, layout[0]);
+            frame_ref.render_widget(title, layout[1]);
 
-            // Split: left image | VS | right image
-            let panels = Layout::default()
+            // VS animation with faces
+            let cols = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(40),
-                ])
-                .split(layout[1]);
+                .constraints([Constraint::Percentage(35), Constraint::Percentage(30), Constraint::Percentage(35)])
+                .split(layout[2]);
 
-            // Left image
-            let left_block = Block::default()
-                .borders(Borders::ALL)
-                .title(Span::styled(" LEFT ", Style::default().fg(NEON_ORANGE).add_modifier(Modifier::BOLD)))
-                .border_style(Style::default().fg(NEON_ORANGE));
-            let left_inner = left_block.inner(panels[0]);
-            frame_ref.render_widget(left_block, panels[0]);
-            if let Some(proto) = left_proto.as_mut() {
-                frame_ref.render_stateful_widget(StatefulImage::new(), left_inner, proto);
-            }
+            // Left face
+            let left_lines: Vec<Line> = FACE_LEFT.iter().enumerate().map(|(i, line)| {
+                let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
+                let color = Color::Rgb(255, 190 + pulse.min(15), 130 + pulse.min(10));
+                Line::from(Span::styled(*line, Style::default().fg(color)))
+            }).collect();
+            let left_bounce = face_bounce(f, false);
+            let mut left_padded = Vec::new();
+            for _ in 0..(1 + left_bounce).max(0) as usize { left_padded.push(Line::from("")); }
+            left_padded.extend(left_lines);
+            frame_ref.render_widget(Paragraph::new(left_padded).alignment(Alignment::Center), cols[0]);
 
-            // VS animation in center
+            // VS sparks
             let vs_idx = (f as usize / 2) % VS_FRAMES.len();
             let vs_lines: Vec<Line> = VS_FRAMES[vs_idx].iter().enumerate().map(|(i, line)| {
                 if i == 1 {
@@ -1009,29 +1049,28 @@ pub fn battle_loading_screen(
                 }
             }).collect();
             let mut vs_padded = Vec::new();
-            let pad_top = panels[1].height.saturating_sub(7) / 2;
-            for _ in 0..pad_top { vs_padded.push(Line::from("")); }
+            for _ in 0..3 { vs_padded.push(Line::from("")); }
             vs_padded.extend(vs_lines);
-            let vs_widget = Paragraph::new(vs_padded).alignment(Alignment::Center);
-            frame_ref.render_widget(vs_widget, panels[1]);
+            frame_ref.render_widget(Paragraph::new(vs_padded).alignment(Alignment::Center), cols[1]);
 
-            // Right image
-            let right_block = Block::default()
-                .borders(Borders::ALL)
-                .title(Span::styled(" RIGHT ", Style::default().fg(NEON_BLUE).add_modifier(Modifier::BOLD)))
-                .border_style(Style::default().fg(NEON_BLUE));
-            let right_inner = right_block.inner(panels[2]);
-            frame_ref.render_widget(right_block, panels[2]);
-            if let Some(proto) = right_proto.as_mut() {
-                frame_ref.render_stateful_widget(StatefulImage::new(), right_inner, proto);
-            }
+            // Right face
+            let right_lines: Vec<Line> = FACE_RIGHT.iter().enumerate().map(|(i, line)| {
+                let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
+                let color = Color::Rgb(160 + pulse.min(15), 190 + pulse.min(15), 255);
+                Line::from(Span::styled(*line, Style::default().fg(color)))
+            }).collect();
+            let right_bounce = face_bounce(f, true);
+            let mut right_padded = Vec::new();
+            for _ in 0..(1 + right_bounce).max(0) as usize { right_padded.push(Line::from("")); }
+            right_padded.extend(right_lines);
+            frame_ref.render_widget(Paragraph::new(right_padded).alignment(Alignment::Center), cols[2]);
 
             // Spinner + status
             let spinner = SPINNER_FRAMES[(f as usize) % SPINNER_FRAMES.len()];
             let phrase = BATTLE_PHRASES[((f / 8) as usize) % BATTLE_PHRASES.len()];
-            let progress_bar_width = 20usize;
-            let progress = ((f % 40) as usize).min(progress_bar_width);
-            let bar = format!("{}{}", "\u{2588}".repeat(progress), "\u{2591}".repeat(progress_bar_width - progress));
+            let bar_w = 30usize;
+            let progress = ((f % (bar_w as u64 * 2)) as usize).min(bar_w);
+            let bar = format!("{}{}", "\u{2588}".repeat(progress), "\u{2591}".repeat(bar_w - progress));
 
             let status = Paragraph::new(vec![
                 Line::from(""),
@@ -1046,12 +1085,11 @@ pub fn battle_loading_screen(
             ])
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
-            frame_ref.render_widget(status, layout[2]);
+            frame_ref.render_widget(status, layout[3]);
         })?;
 
         frame = frame.wrapping_add(1);
 
-        // Animation tick ~5fps, also allow ESC to cancel (won't stop analysis but hides screen)
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press && key.code == KeyCode::Esc {
@@ -1060,6 +1098,8 @@ pub fn battle_loading_screen(
             }
         }
     }
+    // Explicitly drop session to cleanly restore terminal
+    drop(session);
     Ok(())
 }
 

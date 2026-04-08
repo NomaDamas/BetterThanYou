@@ -18,12 +18,17 @@ use sha2::{Digest, Sha256};
 
 pub const PRODUCT_NAME: &str = "BetterThanYou";
 pub const ENGINE_VERSION: &str = "deterministic-heuristic-v1";
-pub const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
+pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5.4-mini";
 
 pub const OPENAI_VLM_MODELS: &[&str] = &[
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.4-pro",
+    "gpt-5.2",
+    "gpt-5",
     "gpt-4.1",
     "gpt-4.1-mini",
-    "gpt-4.1-nano",
     "gpt-4o",
     "gpt-4o-mini",
     "o3",
@@ -102,7 +107,7 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Korean, "star_github") => "GitHub 스타 주기",
         (Language::Korean, "back") => "뒤로",
         (Language::Korean, "rematch") => "같은 상대로 재대결",
-        (Language::Korean, "new_portraits") => "새 초상화 선택",
+        (Language::Korean, "new_portraits") => "새 사진 선택",
         (Language::Korean, "battle_setup") => "배틀 준비",
         (Language::Korean, "left_portrait") => "왼쪽 초상화",
         (Language::Korean, "right_portrait") => "오른쪽 초상화",
