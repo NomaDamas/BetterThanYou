@@ -394,6 +394,7 @@ async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Re
     options.axis_weights = parse_axis_weights(&args.axis_weights)?;
     if let Some(session_state) = state {
         options.openai_config.api_key = session_state.app_state.openai_api_key.clone();
+        options.language = session_state.language;
         // Set saved keys as env vars so lib.rs can find them
         if let Some(key) = &session_state.app_state.anthropic_api_key {
             std::env::set_var("ANTHROPIC_API_KEY", key);

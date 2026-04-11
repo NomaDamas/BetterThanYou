@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
-use better_than_you::{open_path, AxisCard, BattleResult, SavedArtifacts};
+use better_than_you::{localized_axis_short, open_path, AxisCard, BattleResult, Language, SavedArtifacts};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute};
@@ -444,14 +444,19 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
             );
 
             let axis_count = result.axis_cards.len();
+            let has_dual = result.dual_scores.as_ref().and_then(|d| d.vlm.as_ref()).is_some();
+            let dual_height: u16 = if has_dual { 4 } else { 0 };
+            // Compact: 1 line per axis + 2 for borders
+            let stat_height = (axis_count as u16) + 2;
 
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(6),                               // VS header
-                    Constraint::Length((axis_count as u16) * 2 + 2),    // side-by-side stats
-                    Constraint::Min(6),                                 // analysis
-                    Constraint::Length(3),                               // footer/hotkeys
+                    Constraint::Length(6),                    // VS header
+                    Constraint::Length(dual_height),          // dual-score bar (optional)
+                    Constraint::Length(stat_height),          // side-by-side stats
+                    Constraint::Min(5),                       // analysis
+                    Constraint::Length(3),                    // footer/hotkeys
                 ])
                 .split(area);
 
@@ -462,11 +467,56 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                 .alignment(Alignment::Center);
             frame.render_widget(hero, layout[0]);
 
-            // ── Side-by-side stat comparison ───────────────────────────
+            // ── Dual Score Dashboard (if VLM + heuristic both available) ──
+            if has_dual {
+                if let Some(dual) = result.dual_scores.as_ref() {
+                    let mut dual_lines: Vec<Line> = Vec::new();
+                    dual_lines.push(Line::from(vec![
+                        Span::styled("  \u{2699} HEURISTIC  ", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            format!("{} {:.1}", result.inputs.left.label, dual.heuristic.left.total),
+                            Style::default().fg(NEON_ORANGE),
+                        ),
+                        Span::styled("  vs  ", Style::default().fg(DIM_TEXT)),
+                        Span::styled(
+                            format!("{} {:.1}", result.inputs.right.label, dual.heuristic.right.total),
+                            Style::default().fg(NEON_BLUE),
+                        ),
+                    ]));
+                    if let Some(vlm) = dual.vlm.as_ref() {
+                        dual_lines.push(Line::from(vec![
+                            Span::styled("  \u{2726} AI JUDGE   ", Style::default().fg(NEON_PURPLE).add_modifier(Modifier::BOLD)),
+                            Span::styled(
+                                format!("{} {:.1}", result.inputs.left.label, vlm.left.total),
+                                Style::default().fg(NEON_ORANGE),
+                            ),
+                            Span::styled("  vs  ", Style::default().fg(DIM_TEXT)),
+                            Span::styled(
+                                format!("{} {:.1}", result.inputs.right.label, vlm.right.total),
+                                Style::default().fg(NEON_BLUE),
+                            ),
+                        ]));
+                    }
+                    let dual_panel = Paragraph::new(dual_lines)
+                        .block(Block::default().borders(Borders::ALL)
+                            .title(Span::styled(" DUAL SCORE ", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)))
+                            .border_style(Style::default().fg(NEON_CYAN)));
+                    frame.render_widget(dual_panel, layout[1]);
+                }
+            }
+
+            // ── Side-by-side stat comparison (compact 1-line-per-axis) ─
             let stat_cols = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(45), Constraint::Percentage(10), Constraint::Percentage(45)])
-                .split(layout[1]);
+                .split(layout[2]);
+
+            // Resolve UI language from the battle result (falls back to English)
+            let ui_lang = match result.language.as_deref() {
+                Some("ko") => Language::Korean,
+                Some("ja") => Language::Japanese,
+                _ => Language::English,
+            };
 
             // Left stats
             let left_is_winner = result.winner.id == "left";
@@ -480,15 +530,13 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                 let won_axis = card.leader == "left";
                 let bar_color = if won_axis { NEON_GREEN } else { stat_bar_color(card.left) };
                 let indicator = if won_axis { "\u{25B2}" } else if card.leader == "tie" { "=" } else { " " };
+                // Use short localized label (e.g. "SYM", "SKIN", "대칭", "피부")
+                let short = localized_axis_short(ui_lang, &card.key);
                 left_stat_lines.push(Line::from(vec![
-                    Span::styled(format!(" {:<16}", card.label), Style::default().fg(NEON_GOLD)),
-                    Span::styled(format!("{:>5.1}", card.left), Style::default().fg(LIGHT_TEXT)),
-                    Span::styled(format!(" {}", indicator), Style::default().fg(if won_axis { NEON_GREEN } else { DIM_TEXT })),
-                ]));
-                left_stat_lines.push(Line::from(vec![
-                    Span::styled("  ", Style::default()),
+                    Span::styled(format!(" {:<8}", short), Style::default().fg(NEON_GOLD)),
                     Span::styled("\u{2588}".repeat(filled), Style::default().fg(bar_color)),
                     Span::styled("\u{2591}".repeat(empty), Style::default().fg(Color::Rgb(40, 40, 60))),
+                    Span::styled(format!(" {:>5.1} {}", card.left, indicator), Style::default().fg(if won_axis { NEON_GREEN } else { LIGHT_TEXT })),
                 ]));
             }
             let left_panel = Paragraph::new(left_stat_lines)
@@ -499,6 +547,7 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
 
             // VS column (gap indicators)
             let mut gap_lines: Vec<Line> = Vec::new();
+            gap_lines.push(Line::from(""));
             for card in &result.axis_cards {
                 let (gap_text, gap_color) = if card.leader == "tie" {
                     ("TIE".to_string(), NEON_CYAN)
@@ -511,7 +560,6 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                     format!("{:^8}", gap_text),
                     Style::default().fg(gap_color).add_modifier(Modifier::BOLD),
                 )));
-                gap_lines.push(Line::from(""));
             }
             let gap_panel = Paragraph::new(gap_lines).alignment(Alignment::Center);
             frame.render_widget(gap_panel, stat_cols[1]);
@@ -528,15 +576,12 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                 let won_axis = card.leader == "right";
                 let bar_color = if won_axis { NEON_GREEN } else { stat_bar_color(card.right) };
                 let indicator = if won_axis { "\u{25B2}" } else if card.leader == "tie" { "=" } else { " " };
+                let short = localized_axis_short(ui_lang, &card.key);
                 right_stat_lines.push(Line::from(vec![
-                    Span::styled(format!(" {:<16}", card.label), Style::default().fg(NEON_GOLD)),
-                    Span::styled(format!("{:>5.1}", card.right), Style::default().fg(LIGHT_TEXT)),
-                    Span::styled(format!(" {}", indicator), Style::default().fg(if won_axis { NEON_GREEN } else { DIM_TEXT })),
-                ]));
-                right_stat_lines.push(Line::from(vec![
-                    Span::styled("  ", Style::default()),
+                    Span::styled(format!(" {:<8}", short), Style::default().fg(NEON_GOLD)),
                     Span::styled("\u{2588}".repeat(filled), Style::default().fg(bar_color)),
                     Span::styled("\u{2591}".repeat(empty), Style::default().fg(Color::Rgb(40, 40, 60))),
+                    Span::styled(format!(" {:>5.1} {}", card.right, indicator), Style::default().fg(if won_axis { NEON_GREEN } else { LIGHT_TEXT })),
                 ]));
             }
             let right_panel = Paragraph::new(right_stat_lines)
@@ -562,7 +607,7 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                     Span::styled(result.sections.model_jury_notes.clone(), Style::default().fg(DIM_TEXT)),
                 ]),
             ];
-            draw_panel(frame, layout[2], "JUDGE ANALYSIS", analysis, NEON_PURPLE);
+            draw_panel(frame, layout[3], "JUDGE ANALYSIS", analysis, NEON_PURPLE);
 
             // ── Footer/hotkeys ─────────────────────────────────────────
             let footer = Paragraph::new(Line::from(vec![
@@ -577,7 +622,7 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
             .block(Block::default()
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
-            frame.render_widget(footer, layout[3]);
+            frame.render_widget(footer, layout[4]);
         })?;
 
         if let Event::Key(key) = event::read()? {

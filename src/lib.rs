@@ -101,7 +101,7 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         // Menu items
         (Language::Korean, "start_battle") => "배틀 시작",
         (Language::Korean, "open_report") => "최근 리포트 열기",
-        (Language::Korean, "share_result") => "결과 공유",
+        (Language::Korean, "share_result") => "SNS 공유",
         (Language::Korean, "settings") => "설정",
         (Language::Korean, "quit") => "종료",
         (Language::Korean, "star_github") => "GitHub 스타 주기",
@@ -127,10 +127,62 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Korean, "labels") => "라벨",
         (Language::Korean, "output_dir") => "출력 디렉토리",
         (Language::Korean, "aesthetic_tuning") => "미적 조정",
+        // Report
+        (Language::Korean, "report_title") => "배틀 리포트",
+        (Language::Korean, "report_winner") => "승자",
+        (Language::Korean, "report_overall_take") => "총평",
+        (Language::Korean, "report_why_won") => "승리 이유",
+        (Language::Korean, "report_jury_notes") => "심사위원 노트",
+        (Language::Korean, "report_heuristic") => "휴리스틱 분석",
+        (Language::Korean, "report_vlm") => "AI 심사관",
+        (Language::Korean, "report_combined") => "종합 점수",
+        (Language::Korean, "report_score") => "점수",
+        (Language::Korean, "report_strengths") => "강점",
+        (Language::Korean, "report_weaknesses") => "약점",
+        (Language::Korean, "report_ability_comparison") => "능력치 비교",
+        (Language::Korean, "report_portrait_analysis") => "사진별 분석",
+        (Language::Korean, "report_margin") => "격차",
+        (Language::Korean, "report_decisive") => "압도적!",
+        (Language::Korean, "report_left") => "왼쪽",
+        (Language::Korean, "report_right") => "오른쪽",
+        (Language::Korean, "report_vs") => "VS",
+        (Language::Korean, "report_generated") => "생성 시각",
+        (Language::Korean, "axis_facial_symmetry") => "얼굴 대칭",
+        (Language::Korean, "axis_facial_proportions") => "얼굴 비율",
+        (Language::Korean, "axis_skin_quality") => "피부 상태",
+        (Language::Korean, "axis_eye_expression") => "눈 표현력",
+        (Language::Korean, "axis_hair_grooming") => "헤어 & 그루밍",
+        (Language::Korean, "axis_bone_structure") => "골격 구조",
+        (Language::Korean, "axis_expression_charisma") => "표정 & 카리스마",
+        (Language::Korean, "axis_lighting_color") => "조명 & 색감",
+        (Language::Korean, "axis_background_framing") => "배경 & 구도",
+        (Language::Korean, "axis_photogenic_impact") => "포토제닉 임팩트",
+        // Short axis labels (for tight UI)
+        (Language::Korean, "short_facial_symmetry") => "대칭",
+        (Language::Korean, "short_facial_proportions") => "비율",
+        (Language::Korean, "short_skin_quality") => "피부",
+        (Language::Korean, "short_eye_expression") => "눈",
+        (Language::Korean, "short_hair_grooming") => "헤어",
+        (Language::Korean, "short_bone_structure") => "골격",
+        (Language::Korean, "short_expression_charisma") => "아우라",
+        (Language::Korean, "short_lighting_color") => "조명",
+        (Language::Korean, "short_background_framing") => "배경",
+        (Language::Korean, "short_photogenic_impact") => "임팩트",
+        // Axis descriptions (for "what does this mean")
+        (Language::Korean, "desc_facial_symmetry") => "좌우 얼굴 균형",
+        (Language::Korean, "desc_facial_proportions") => "황금비율, 이목구비 배치",
+        (Language::Korean, "desc_skin_quality") => "매끄러움, 톤 균일성",
+        (Language::Korean, "desc_eye_expression") => "눈의 생동감과 표현력",
+        (Language::Korean, "desc_hair_grooming") => "스타일과 프레이밍",
+        (Language::Korean, "desc_bone_structure") => "턱선과 골격 정의",
+        (Language::Korean, "desc_expression_charisma") => "표정과 분위기",
+        (Language::Korean, "desc_lighting_color") => "조명 품질과 색감",
+        (Language::Korean, "desc_background_framing") => "배경과 구도",
+        (Language::Korean, "desc_photogenic_impact") => "첫인상 임팩트",
 
         (Language::Japanese, "start_battle") => "バトル開始",
         (Language::Japanese, "open_report") => "最新レポートを開く",
-        (Language::Japanese, "share_result") => "結果共有",
+        (Language::Japanese, "share_result") => "SNSシェア",
         (Language::Japanese, "settings") => "設定",
         (Language::Japanese, "quit") => "終了",
         (Language::Japanese, "star_github") => "GitHubスター",
@@ -156,11 +208,63 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Japanese, "labels") => "ラベル",
         (Language::Japanese, "output_dir") => "出力ディレクトリ",
         (Language::Japanese, "aesthetic_tuning") => "美的調整",
+        // Report
+        (Language::Japanese, "report_title") => "バトルレポート",
+        (Language::Japanese, "report_winner") => "勝者",
+        (Language::Japanese, "report_overall_take") => "総評",
+        (Language::Japanese, "report_why_won") => "勝利の理由",
+        (Language::Japanese, "report_jury_notes") => "ジュリーノート",
+        (Language::Japanese, "report_heuristic") => "ヒューリスティック分析",
+        (Language::Japanese, "report_vlm") => "AI審査官",
+        (Language::Japanese, "report_combined") => "総合スコア",
+        (Language::Japanese, "report_score") => "スコア",
+        (Language::Japanese, "report_strengths") => "強み",
+        (Language::Japanese, "report_weaknesses") => "弱み",
+        (Language::Japanese, "report_ability_comparison") => "能力値比較",
+        (Language::Japanese, "report_portrait_analysis") => "写真別分析",
+        (Language::Japanese, "report_margin") => "差",
+        (Language::Japanese, "report_decisive") => "圧倒的！",
+        (Language::Japanese, "report_left") => "左",
+        (Language::Japanese, "report_right") => "右",
+        (Language::Japanese, "report_vs") => "VS",
+        (Language::Japanese, "report_generated") => "生成時刻",
+        (Language::Japanese, "axis_facial_symmetry") => "顔の対称性",
+        (Language::Japanese, "axis_facial_proportions") => "顔のプロポーション",
+        (Language::Japanese, "axis_skin_quality") => "肌の質",
+        (Language::Japanese, "axis_eye_expression") => "目の表現力",
+        (Language::Japanese, "axis_hair_grooming") => "ヘア & グルーミング",
+        (Language::Japanese, "axis_bone_structure") => "骨格構造",
+        (Language::Japanese, "axis_expression_charisma") => "表情 & カリスマ",
+        (Language::Japanese, "axis_lighting_color") => "照明 & 色",
+        (Language::Japanese, "axis_background_framing") => "背景 & 構図",
+        (Language::Japanese, "axis_photogenic_impact") => "フォトジェニックインパクト",
+        // Short axis labels
+        (Language::Japanese, "short_facial_symmetry") => "対称",
+        (Language::Japanese, "short_facial_proportions") => "比率",
+        (Language::Japanese, "short_skin_quality") => "肌",
+        (Language::Japanese, "short_eye_expression") => "目",
+        (Language::Japanese, "short_hair_grooming") => "髪",
+        (Language::Japanese, "short_bone_structure") => "骨格",
+        (Language::Japanese, "short_expression_charisma") => "オーラ",
+        (Language::Japanese, "short_lighting_color") => "照明",
+        (Language::Japanese, "short_background_framing") => "背景",
+        (Language::Japanese, "short_photogenic_impact") => "インパクト",
+        // Descriptions
+        (Language::Japanese, "desc_facial_symmetry") => "左右のバランス",
+        (Language::Japanese, "desc_facial_proportions") => "黄金比と配置",
+        (Language::Japanese, "desc_skin_quality") => "滑らかさと均一性",
+        (Language::Japanese, "desc_eye_expression") => "目の生命力と表現",
+        (Language::Japanese, "desc_hair_grooming") => "スタイルとフレーミング",
+        (Language::Japanese, "desc_bone_structure") => "顎のラインと骨格",
+        (Language::Japanese, "desc_expression_charisma") => "表情と雰囲気",
+        (Language::Japanese, "desc_lighting_color") => "照明品質と色彩",
+        (Language::Japanese, "desc_background_framing") => "背景と構図",
+        (Language::Japanese, "desc_photogenic_impact") => "第一印象のインパクト",
 
         // English defaults
         (_, "start_battle") => "Start Battle",
         (_, "open_report") => "Open Latest Report",
-        (_, "share_result") => "Share Latest Result",
+        (_, "share_result") => "Share to SNS",
         (_, "settings") => "Settings",
         (_, "quit") => "Quit",
         (_, "star_github") => "Star BetterThanYou on GitHub",
@@ -186,47 +290,208 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (_, "labels") => "Labels",
         (_, "output_dir") => "Output directory",
         (_, "aesthetic_tuning") => "Aesthetic tuning",
+        // Report defaults
+        (_, "report_title") => "Battle Report",
+        (_, "report_winner") => "Winner",
+        (_, "report_overall_take") => "Overall Take",
+        (_, "report_why_won") => "Why This Won",
+        (_, "report_jury_notes") => "Jury Notes",
+        (_, "report_heuristic") => "Heuristic Analysis",
+        (_, "report_vlm") => "AI Judge",
+        (_, "report_combined") => "Combined Score",
+        (_, "report_score") => "Score",
+        (_, "report_strengths") => "Strengths",
+        (_, "report_weaknesses") => "Weaknesses",
+        (_, "report_ability_comparison") => "Ability Comparison",
+        (_, "report_portrait_analysis") => "Per-Portrait Analysis",
+        (_, "report_margin") => "Margin",
+        (_, "report_decisive") => "DECISIVE!",
+        (_, "report_left") => "LEFT",
+        (_, "report_right") => "RIGHT",
+        (_, "report_vs") => "VS",
+        (_, "report_generated") => "Generated",
+        (_, "axis_facial_symmetry") => "Facial Symmetry",
+        (_, "axis_facial_proportions") => "Facial Proportions",
+        (_, "axis_skin_quality") => "Skin Quality",
+        (_, "axis_eye_expression") => "Eye Expression",
+        (_, "axis_hair_grooming") => "Hair & Grooming",
+        (_, "axis_bone_structure") => "Bone Structure",
+        (_, "axis_expression_charisma") => "Expression & Charisma",
+        (_, "axis_lighting_color") => "Lighting & Color",
+        (_, "axis_background_framing") => "Background & Framing",
+        (_, "axis_photogenic_impact") => "Photogenic Impact",
+        // Short axis labels
+        (_, "short_facial_symmetry") => "SYM",
+        (_, "short_facial_proportions") => "RATIO",
+        (_, "short_skin_quality") => "SKIN",
+        (_, "short_eye_expression") => "EYES",
+        (_, "short_hair_grooming") => "HAIR",
+        (_, "short_bone_structure") => "BONE",
+        (_, "short_expression_charisma") => "AURA",
+        (_, "short_lighting_color") => "LIGHT",
+        (_, "short_background_framing") => "FRAME",
+        (_, "short_photogenic_impact") => "IMPACT",
+        // Descriptions
+        (_, "desc_facial_symmetry") => "Left-right face balance",
+        (_, "desc_facial_proportions") => "Golden ratio & feature placement",
+        (_, "desc_skin_quality") => "Smoothness & evenness",
+        (_, "desc_eye_expression") => "Eye vibrance & emotion",
+        (_, "desc_hair_grooming") => "Style & framing",
+        (_, "desc_bone_structure") => "Jawline & structure",
+        (_, "desc_expression_charisma") => "Expression & mood",
+        (_, "desc_lighting_color") => "Lighting quality & color",
+        (_, "desc_background_framing") => "Background & composition",
+        (_, "desc_photogenic_impact") => "First-impression impact",
         _ => "",
     }
+}
+
+/// Short axis label (2-6 chars) suitable for cramped UI.
+pub fn localized_axis_short(lang: Language, key: &str) -> String {
+    let mapped = match key {
+        "facial_symmetry" => "short_facial_symmetry",
+        "facial_proportions" => "short_facial_proportions",
+        "skin_quality" => "short_skin_quality",
+        "eye_expression" => "short_eye_expression",
+        "hair_grooming" => "short_hair_grooming",
+        "bone_structure" => "short_bone_structure",
+        "expression_charisma" => "short_expression_charisma",
+        "lighting_color" => "short_lighting_color",
+        "background_framing" => "short_background_framing",
+        "photogenic_impact" => "short_photogenic_impact",
+        _ => return key.to_string(),
+    };
+    t(lang, mapped).to_string()
+}
+
+/// Brief description of what an axis measures.
+pub fn localized_axis_desc(lang: Language, key: &str) -> String {
+    let mapped = match key {
+        "facial_symmetry" => "desc_facial_symmetry",
+        "facial_proportions" => "desc_facial_proportions",
+        "skin_quality" => "desc_skin_quality",
+        "eye_expression" => "desc_eye_expression",
+        "hair_grooming" => "desc_hair_grooming",
+        "bone_structure" => "desc_bone_structure",
+        "expression_charisma" => "desc_expression_charisma",
+        "lighting_color" => "desc_lighting_color",
+        "background_framing" => "desc_background_framing",
+        "photogenic_impact" => "desc_photogenic_impact",
+        _ => return String::new(),
+    };
+    t(lang, mapped).to_string()
+}
+
+/// Icon for an axis (used in UI).
+pub fn axis_icon(key: &str) -> &'static str {
+    AXIS_DEFINITIONS.iter().find(|a| a.key == key).map(|a| a.icon).unwrap_or("")
+}
+
+/// Look up localized axis label by axis key.
+pub fn localized_axis_label(lang: Language, key: &str) -> String {
+    let mapped = match key {
+        "facial_symmetry" => "axis_facial_symmetry",
+        "facial_proportions" => "axis_facial_proportions",
+        "skin_quality" => "axis_skin_quality",
+        "eye_expression" => "axis_eye_expression",
+        "hair_grooming" => "axis_hair_grooming",
+        "bone_structure" => "axis_bone_structure",
+        "expression_charisma" => "axis_expression_charisma",
+        "lighting_color" => "axis_lighting_color",
+        "background_framing" => "axis_background_framing",
+        "photogenic_impact" => "axis_photogenic_impact",
+        _ => return key.to_string(),
+    };
+    t(lang, mapped).to_string()
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct AxisDefinition {
     pub key: &'static str,
     pub label: &'static str,
+    pub short: &'static str,
+    pub icon: &'static str,
     pub weight: f32,
 }
 
-pub const AXIS_DEFINITIONS: [AxisDefinition; 6] = [
-    AxisDefinition { key: "symmetry_harmony", label: "Symmetry & Harmony", weight: 1.0 },
-    AxisDefinition { key: "lighting_contrast", label: "Lighting & Contrast", weight: 1.0 },
-    AxisDefinition { key: "sharpness_detail", label: "Sharpness & Detail", weight: 1.0 },
-    AxisDefinition { key: "color_vitality", label: "Color Vitality", weight: 1.0 },
-    AxisDefinition { key: "composition_presence", label: "Composition & Presence", weight: 1.1 },
-    AxisDefinition { key: "style_aura", label: "Style Aura", weight: 1.1 },
+pub const AXIS_DEFINITIONS: [AxisDefinition; 10] = [
+    AxisDefinition { key: "facial_symmetry",     label: "Facial Symmetry",     short: "SYM",   icon: "\u{269C}",   weight: 1.0 }, // ⚜
+    AxisDefinition { key: "facial_proportions",  label: "Facial Proportions",  short: "RATIO", icon: "\u{25C6}",   weight: 1.0 }, // ◆
+    AxisDefinition { key: "skin_quality",        label: "Skin Quality",        short: "SKIN",  icon: "\u{2728}",   weight: 1.0 }, // ✨
+    AxisDefinition { key: "eye_expression",      label: "Eye Expression",      short: "EYES",  icon: "\u{1F441}",  weight: 1.1 }, // 👁
+    AxisDefinition { key: "hair_grooming",       label: "Hair & Grooming",     short: "HAIR",  icon: "\u{2702}",   weight: 0.8 }, // ✂
+    AxisDefinition { key: "bone_structure",      label: "Bone Structure",      short: "BONE",  icon: "\u{1F9B4}",  weight: 0.9 }, // 🦴
+    AxisDefinition { key: "expression_charisma", label: "Expression & Charisma", short: "AURA",  icon: "\u{1F525}",  weight: 1.2 }, // 🔥
+    AxisDefinition { key: "lighting_color",      label: "Lighting & Color",    short: "LIGHT", icon: "\u{1F4A1}",  weight: 1.0 }, // 💡
+    AxisDefinition { key: "background_framing",  label: "Background & Framing", short: "FRAME", icon: "\u{1F5BC}",  weight: 0.8 }, // 🖼
+    AxisDefinition { key: "photogenic_impact",   label: "Photogenic Impact",   short: "IMPACT", icon: "\u{1F4A5}",  weight: 1.3 }, // 💥
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AxisScores {
-    pub symmetry_harmony: f32,
-    pub lighting_contrast: f32,
-    pub sharpness_detail: f32,
-    pub color_vitality: f32,
-    pub composition_presence: f32,
-    pub style_aura: f32,
+    #[serde(default)]
+    pub facial_symmetry: f32,
+    #[serde(default)]
+    pub facial_proportions: f32,
+    #[serde(default)]
+    pub skin_quality: f32,
+    #[serde(default)]
+    pub eye_expression: f32,
+    #[serde(default)]
+    pub hair_grooming: f32,
+    #[serde(default)]
+    pub bone_structure: f32,
+    #[serde(default)]
+    pub expression_charisma: f32,
+    #[serde(default)]
+    pub lighting_color: f32,
+    #[serde(default)]
+    pub background_framing: f32,
+    #[serde(default)]
+    pub photogenic_impact: f32,
 }
 
 impl AxisScores {
     pub fn get(&self, key: &str) -> f32 {
         match key {
-            "symmetry_harmony" => self.symmetry_harmony,
-            "lighting_contrast" => self.lighting_contrast,
-            "sharpness_detail" => self.sharpness_detail,
-            "color_vitality" => self.color_vitality,
-            "composition_presence" => self.composition_presence,
-            "style_aura" => self.style_aura,
+            "facial_symmetry" => self.facial_symmetry,
+            "facial_proportions" => self.facial_proportions,
+            "skin_quality" => self.skin_quality,
+            "eye_expression" => self.eye_expression,
+            "hair_grooming" => self.hair_grooming,
+            "bone_structure" => self.bone_structure,
+            "expression_charisma" => self.expression_charisma,
+            "lighting_color" => self.lighting_color,
+            "background_framing" => self.background_framing,
+            "photogenic_impact" => self.photogenic_impact,
             _ => 0.0,
         }
+    }
+
+    pub fn set(&mut self, key: &str, value: f32) {
+        match key {
+            "facial_symmetry" => self.facial_symmetry = value,
+            "facial_proportions" => self.facial_proportions = value,
+            "skin_quality" => self.skin_quality = value,
+            "eye_expression" => self.eye_expression = value,
+            "hair_grooming" => self.hair_grooming = value,
+            "bone_structure" => self.bone_structure = value,
+            "expression_charisma" => self.expression_charisma = value,
+            "lighting_color" => self.lighting_color = value,
+            "background_framing" => self.background_framing = value,
+            "photogenic_impact" => self.photogenic_impact = value,
+            _ => {}
+        }
+    }
+
+    /// Weighted blend: self * a + other * b (weights should sum to 1.0)
+    pub fn blend(&self, other: &Self, self_weight: f32, other_weight: f32) -> Self {
+        let mut out = Self::default();
+        for axis in AXIS_DEFINITIONS.iter() {
+            let v = self.get(axis.key) * self_weight + other.get(axis.key) * other_weight;
+            out.set(axis.key, round(v));
+        }
+        out
     }
 }
 
@@ -243,6 +508,13 @@ pub struct ScoreBundle {
     pub axes: AxisScores,
     pub total: f32,
     pub telemetry: Option<ScoreTelemetry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DualScores {
+    pub heuristic: SideScores,
+    #[serde(default)]
+    pub vlm: Option<SideScores>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -317,9 +589,13 @@ pub struct BattleResult {
     pub qualitative_sections: Vec<String>,
     pub inputs: BattleInputs,
     pub scores: SideScores,
+    #[serde(default)]
+    pub dual_scores: Option<DualScores>,
     pub axis_cards: Vec<AxisCard>,
     pub winner: Winner,
     pub sections: BattleSections,
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -366,6 +642,7 @@ pub struct AnalyzeOptions {
     pub openai_model: String,
     pub openai_config: OpenAiConfig,
     pub axis_weights: Vec<(String, f32)>,
+    pub language: Language,
 }
 
 impl AnalyzeOptions {
@@ -379,6 +656,7 @@ impl AnalyzeOptions {
             openai_model: DEFAULT_OPENAI_MODEL.to_string(),
             openai_config: OpenAiConfig::default(),
             axis_weights: Vec::new(),
+            language: Language::English,
         }
     }
 }
@@ -479,6 +757,21 @@ fn normalize_source_input(input: &str) -> String {
     value
 }
 
+/// Extract a human-friendly label from a source (filename stem without extension).
+/// Returns None for data URLs or if no meaningful name can be extracted.
+fn label_from_source(source: &str) -> Option<String> {
+    if source.starts_with("data:") {
+        return None;
+    }
+    let normalized = normalize_source_input(source);
+    // Strip query/fragment for URLs
+    let clean = normalized.split(['?', '#']).next().unwrap_or(&normalized);
+    let path = Path::new(clean);
+    let stem = path.file_stem()?.to_string_lossy().to_string();
+    let trimmed = stem.trim().to_string();
+    if trimmed.is_empty() { None } else { Some(trimmed) }
+}
+
 fn looks_like_base64(value: &str) -> bool {
     value.len() > 96 && value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '/' | '=' | '\n' | '\r'))
 }
@@ -509,7 +802,12 @@ async fn load_portrait(source: &str, label: Option<&str>, side: &str) -> Result<
     let image = image::load_from_memory(&bytes).context("failed to decode image")?;
     let mime = infer_mime_type(&normalized);
     let hash = hash_bytes(&bytes);
-    let final_label = label.map(str::to_string).unwrap_or_else(|| side.to_string());
+    // Label priority: explicit user label > filename stem > side fallback ("left"/"right")
+    let final_label = label
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+        .or_else(|| label_from_source(source))
+        .unwrap_or_else(|| side.to_string());
 
     Ok(LoadedPortrait {
         id: side.to_string(),
@@ -619,6 +917,75 @@ fn compute_palette_mood(flat: &[Sample]) -> f32 {
     clamp((average(&warmth) + 1.0) * 0.25 + average(&vibrance) * 0.65, 0.0, 1.0)
 }
 
+/// Sample a rectangular sub-region of the grid by normalized bounds (0..1).
+/// y0/y1 are vertical bounds (top=0), x0/x1 are horizontal bounds.
+fn region_samples(grid: &[Vec<Sample>], x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<Sample> {
+    let h = grid.len();
+    if h == 0 { return Vec::new(); }
+    let w = grid[0].len();
+    if w == 0 { return Vec::new(); }
+    let row_start = ((y0 * h as f32).max(0.0) as usize).min(h.saturating_sub(1));
+    let row_end = ((y1 * h as f32).ceil() as usize).min(h);
+    let col_start = ((x0 * w as f32).max(0.0) as usize).min(w.saturating_sub(1));
+    let col_end = ((x1 * w as f32).ceil() as usize).min(w);
+    let mut out = Vec::new();
+    for r in row_start..row_end {
+        for c in col_start..col_end {
+            out.push(grid[r][c]);
+        }
+    }
+    out
+}
+
+/// Texture variance over a region — used for skin smoothness (low variance = smooth skin).
+fn region_texture_variance(grid: &[Vec<Sample>], x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
+    let h = grid.len();
+    if h == 0 { return 0.0; }
+    let w = grid[0].len();
+    if w == 0 { return 0.0; }
+    let row_start = ((y0 * h as f32).max(0.0) as usize).min(h.saturating_sub(1));
+    let row_end = ((y1 * h as f32).ceil() as usize).min(h);
+    let col_start = ((x0 * w as f32).max(0.0) as usize).min(w.saturating_sub(1));
+    let col_end = ((x1 * w as f32).ceil() as usize).min(w);
+    let mut diffs = Vec::new();
+    for r in row_start..row_end {
+        for c in col_start..col_end {
+            if c + 1 < col_end {
+                diffs.push((grid[r][c].luminance - grid[r][c + 1].luminance).abs());
+            }
+            if r + 1 < row_end {
+                diffs.push((grid[r][c].luminance - grid[r + 1][c].luminance).abs());
+            }
+        }
+    }
+    average(&diffs)
+}
+
+/// Edge density over a region — high value = sharp/well-defined features.
+fn region_edge_density(grid: &[Vec<Sample>], x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
+    region_texture_variance(grid, x0, y0, x1, y1)
+}
+
+/// Symmetry of a horizontal slice (upper or lower half of face).
+fn region_mirror_diff(grid: &[Vec<Sample>], y0: f32, y1: f32) -> f32 {
+    let h = grid.len();
+    if h == 0 { return 0.5; }
+    let w = grid[0].len();
+    if w == 0 { return 0.5; }
+    let row_start = ((y0 * h as f32).max(0.0) as usize).min(h.saturating_sub(1));
+    let row_end = ((y1 * h as f32).ceil() as usize).min(h);
+    let mut diffs = Vec::new();
+    for r in row_start..row_end {
+        let half = w / 2;
+        for idx in 0..half {
+            let l = grid[r][idx];
+            let rr = grid[r][w - 1 - idx];
+            diffs.push((l.luminance - rr.luminance).abs());
+        }
+    }
+    average(&diffs)
+}
+
 fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]) -> ScoreBundle {
     let grid = sample_grid(&portrait.image, 48, 60);
     let flat = flatten_grid(&grid);
@@ -633,13 +1000,118 @@ fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]
     let saturation_deviation = stddev(&saturations);
     let palette_mood = compute_palette_mood(&flat);
 
+    // ── Region-based heuristics (approximated face regions) ──────────────
+    // Face region: center 60% width, upper 15% → lower 85% height
+    let face_samples = region_samples(&grid, 0.2, 0.15, 0.8, 0.85);
+    let face_lums: Vec<f32> = face_samples.iter().map(|s| s.luminance).collect();
+    let face_sats: Vec<f32> = face_samples.iter().map(|s| s.saturation).collect();
+
+    // Eye region: center, upper portion (30-50% height)
+    let eye_samples = region_samples(&grid, 0.25, 0.28, 0.75, 0.48);
+    let eye_lums: Vec<f32> = eye_samples.iter().map(|s| s.luminance).collect();
+    let eye_contrast = if eye_lums.is_empty() { 0.0 } else { percentile(&eye_lums, 0.9) - percentile(&eye_lums, 0.1) };
+    let eye_edge = region_edge_density(&grid, 0.25, 0.28, 0.75, 0.48);
+
+    // Skin region: cheeks and forehead (lower-middle of face)
+    let skin_variance = region_texture_variance(&grid, 0.28, 0.38, 0.72, 0.72);
+    let skin_color_uniformity = 1.0 - stddev(&face_sats).min(1.0);
+
+    // Hair region: top 30% of frame
+    let hair_edge = region_edge_density(&grid, 0.1, 0.0, 0.9, 0.3);
+    let hair_samples = region_samples(&grid, 0.1, 0.0, 0.9, 0.25);
+    let hair_sat_consistency = 1.0 - stddev(&hair_samples.iter().map(|s| s.saturation).collect::<Vec<_>>()).min(1.0);
+
+    // Jawline/bone structure: lower face (60-90% height)
+    let jaw_edge = region_edge_density(&grid, 0.2, 0.60, 0.8, 0.90);
+    let jaw_contrast = {
+        let samples = region_samples(&grid, 0.2, 0.60, 0.8, 0.90);
+        let lums: Vec<f32> = samples.iter().map(|s| s.luminance).collect();
+        if lums.is_empty() { 0.0 } else { percentile(&lums, 0.85) - percentile(&lums, 0.15) }
+    };
+
+    // Upper/lower face balance (for proportions)
+    let upper_mirror = region_mirror_diff(&grid, 0.15, 0.55);
+    let lower_mirror = region_mirror_diff(&grid, 0.55, 0.90);
+    let proportion_harmony = 1.0 - (upper_mirror - lower_mirror).abs();
+
+    // Face warmth (expression/charisma proxy)
+    let face_warmth: f32 = if face_samples.is_empty() {
+        0.0
+    } else {
+        face_samples.iter().map(|s| (s.r - s.b) / 255.0).sum::<f32>() / face_samples.len() as f32
+    };
+    let face_saturation_avg = average(&face_sats);
+    let face_luminance_range = if face_lums.is_empty() { 0.0 } else { percentile(&face_lums, 0.9) - percentile(&face_lums, 0.1) };
+
+    // Background (outer region)
+    let bg_samples: Vec<Sample> = flat.iter().filter(|s| s.center_weight < 0.35).copied().collect();
+    let bg_variance = stddev(&bg_samples.iter().map(|s| s.luminance).collect::<Vec<_>>());
+    let bg_quality = clamp(1.0 - bg_variance * 1.5, 0.0, 1.0); // calmer bg = better framing
+
+    // ── Compute axis scores ──────────────────────────────────────────────
+    let h = &portrait.hash;
+
+    let facial_symmetry = round(clamp(
+        100.0 - mirror_difference * 140.0 + hash_signal(h, 0, 4.0),
+        28.0, 99.0,
+    ));
+
+    let facial_proportions = round(clamp(
+        proportion_harmony * 75.0 + center_presence * 20.0 + hash_signal(h, 1, 4.0) + 5.0,
+        25.0, 99.0,
+    ));
+
+    let skin_quality = round(clamp(
+        100.0 - skin_variance * 420.0 + skin_color_uniformity * 15.0 + hash_signal(h, 2, 4.0),
+        22.0, 99.0,
+    ));
+
+    let eye_expression = round(clamp(
+        eye_contrast * 110.0 + eye_edge * 220.0 + hash_signal(h, 3, 4.0) + 10.0,
+        25.0, 99.0,
+    ));
+
+    let hair_grooming = round(clamp(
+        hair_edge * 180.0 + hair_sat_consistency * 30.0 + hash_signal(h, 4, 4.0) + 15.0,
+        22.0, 99.0,
+    ));
+
+    let bone_structure = round(clamp(
+        jaw_edge * 200.0 + jaw_contrast * 85.0 + hash_signal(h, 5, 4.0) + 12.0,
+        22.0, 99.0,
+    ));
+
+    let expression_charisma = round(clamp(
+        center_presence * 65.0 + (face_warmth + 1.0) * 18.0 + face_saturation_avg * 35.0 + face_luminance_range * 28.0 + hash_signal(h, 6, 4.0),
+        22.0, 99.0,
+    ));
+
+    let lighting_color = round(clamp(
+        dynamic_range * 55.0 + luminance_deviation * 60.0 + average(&saturations) * 45.0 + saturation_deviation * 30.0 + color_spread * 25.0 + hash_signal(h, 7, 4.0),
+        22.0, 99.0,
+    ));
+
+    let background_framing = round(clamp(
+        center_presence * 70.0 + bg_quality * 35.0 + edge_strength * 14.0 + hash_signal(h, 8, 4.0),
+        22.0, 99.0,
+    ));
+
+    let photogenic_impact = round(clamp(
+        center_presence * 45.0 + palette_mood * 35.0 + dynamic_range * 25.0 + average(&saturations) * 22.0 + (1.0 - mirror_difference) * 18.0 + hash_signal(h, 9, 4.0),
+        22.0, 99.0,
+    ));
+
     let axes = AxisScores {
-        symmetry_harmony: round(clamp(100.0 - mirror_difference * 145.0 + hash_signal(&portrait.hash, 0, 4.0), 28.0, 99.0)),
-        lighting_contrast: round(clamp(dynamic_range * 62.0 + luminance_deviation * 85.0 + hash_signal(&portrait.hash, 1, 4.0), 24.0, 99.0)),
-        sharpness_detail: round(clamp(edge_strength * 190.0 + luminance_deviation * 18.0 + hash_signal(&portrait.hash, 2, 4.0), 22.0, 99.0)),
-        color_vitality: round(clamp(average(&saturations) * 76.0 + saturation_deviation * 70.0 + color_spread * 32.0 + hash_signal(&portrait.hash, 3, 4.0), 18.0, 99.0)),
-        composition_presence: round(clamp(center_presence * 100.0 + edge_strength * 22.0 + hash_signal(&portrait.hash, 4, 4.0), 20.0, 99.0)),
-        style_aura: round(clamp(palette_mood * 48.0 + center_presence * 28.0 + average(&saturations) * 22.0 + dynamic_range * 12.0 + hash_signal(&portrait.hash, 5, 4.0), 20.0, 99.0)),
+        facial_symmetry,
+        facial_proportions,
+        skin_quality,
+        eye_expression,
+        hair_grooming,
+        bone_structure,
+        expression_charisma,
+        lighting_color,
+        background_framing,
+        photogenic_impact,
     };
 
     ScoreBundle {
@@ -716,7 +1188,7 @@ fn build_battle_narrative(left: &LoadedPortrait, right: &LoadedPortrait, left_sc
             left: format!("{} leaves points on the table in {} and {}, so its lower-end moments feel less polished.", left.label, left_ranked[left_ranked.len() - 1].label.to_lowercase(), left_ranked[left_ranked.len() - 2].label.to_lowercase()),
             right: format!("{} loses ground most visibly in {} and {}, which softens the overall punch.", right.label, right_ranked[right_ranked.len() - 1].label.to_lowercase(), right_ranked[right_ranked.len() - 2].label.to_lowercase()),
         },
-        why_this_won: format!("{} won because it led {} of 6 axes and created its best separation in {} by {:.1} points.", winner.label, lead_axes.len(), decisive.label.to_lowercase(), decisive.diff),
+        why_this_won: format!("{} won because it led {} of {} axes and created its best separation in {} by {:.1} points.", winner.label, lead_axes.len(), AXIS_DEFINITIONS.len(), decisive.label.to_lowercase(), decisive.diff),
         model_jury_notes: "Jury notes are heuristic-only in v1. The engine is deterministic, favors centered portrait presence, and treats totals within 2.5 points as near toss-up territory.".to_string(),
     }
 }
@@ -797,13 +1269,15 @@ fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: Scor
             },
         },
         scores: SideScores { left: left_scores, right: right_scores },
+        dual_scores: None,
         axis_cards,
         winner,
         sections: final_sections,
+        language: None,
     }
 }
 
-async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig) -> Result<OpenAiJudgeOutput> {
+async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
     let api_key = config.api_key.clone().or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok()).or_else(|| std::env::var("OPENAI_API_KEY").ok()).ok_or_else(|| anyhow!("OpenAI judging requires OPENAI_API_KEY or BTY_OPENAI_API_KEY"))?;
     let base_url = config.base_url.clone().or_else(|| std::env::var("OPENAI_BASE_URL").ok()).unwrap_or_else(|| "https://api.openai.com/v1".to_string());
 
@@ -842,10 +1316,7 @@ async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model:
         "required": ["winner_id","left_scores","right_scores","sections"]
     });
 
-    let prompt = format!(
-        "You are BetterThanYou, a visual battle judge for fictional AI-generated adult portraits. Judge only image result and presentation quality. Return one winner and score both portraits on every axis from 0 to 100. Axes: {}",
-        AXIS_DEFINITIONS.iter().map(|axis| format!("{}: {}", axis.key, axis.label)).collect::<Vec<_>>().join(", ")
-    );
+    let prompt = vlm_json_prompt(lang);
 
     let body = json!({
         "model": model,
@@ -887,14 +1358,12 @@ async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model:
     let parsed: Value = serde_json::from_str(&output_text)?;
     let parse_axes = |key: &str| -> AxisScores {
         let scores = parsed.get(key).and_then(Value::as_object).cloned().unwrap_or_default();
-        AxisScores {
-            symmetry_harmony: round(scores.get("symmetry_harmony").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-            lighting_contrast: round(scores.get("lighting_contrast").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-            sharpness_detail: round(scores.get("sharpness_detail").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-            color_vitality: round(scores.get("color_vitality").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-            composition_presence: round(scores.get("composition_presence").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-            style_aura: round(scores.get("style_aura").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+        let mut out = AxisScores::default();
+        for axis in AXIS_DEFINITIONS.iter() {
+            let v = round(scores.get(axis.key).and_then(Value::as_f64).unwrap_or(0.0) as f32);
+            out.set(axis.key, v);
         }
+        out
     };
 
     let sections = parsed.get("sections").and_then(Value::as_object).ok_or_else(|| anyhow!("OpenAI judge missing sections object"))?;
@@ -937,14 +1406,12 @@ fn parse_data_url(data_url: &str) -> (String, String) {
 
 fn parse_vlm_axes(parsed: &Value, key: &str) -> AxisScores {
     let scores = parsed.get(key).and_then(Value::as_object).cloned().unwrap_or_default();
-    AxisScores {
-        symmetry_harmony: round(scores.get("symmetry_harmony").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-        lighting_contrast: round(scores.get("lighting_contrast").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-        sharpness_detail: round(scores.get("sharpness_detail").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-        color_vitality: round(scores.get("color_vitality").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-        composition_presence: round(scores.get("composition_presence").and_then(Value::as_f64).unwrap_or(0.0) as f32),
-        style_aura: round(scores.get("style_aura").and_then(Value::as_f64).unwrap_or(0.0) as f32),
+    let mut out = AxisScores::default();
+    for axis in AXIS_DEFINITIONS.iter() {
+        let v = round(scores.get(axis.key).and_then(Value::as_f64).unwrap_or(0.0) as f32);
+        out.set(axis.key, v);
     }
+    out
 }
 
 fn parse_vlm_sections(parsed: &Value) -> Result<BattleSections> {
@@ -964,11 +1431,16 @@ fn parse_vlm_sections(parsed: &Value) -> Result<BattleSections> {
     })
 }
 
-fn vlm_json_prompt() -> String {
+fn vlm_json_prompt(lang: Language) -> String {
+    let axis_schema: serde_json::Map<String, Value> = AXIS_DEFINITIONS
+        .iter()
+        .map(|axis| (axis.key.to_string(), json!(0)))
+        .collect();
+
     let schema_str = serde_json::to_string_pretty(&json!({
         "winner_id": "left or right",
-        "left_scores": { "symmetry_harmony": 0, "lighting_contrast": 0, "sharpness_detail": 0, "color_vitality": 0, "composition_presence": 0, "style_aura": 0 },
-        "right_scores": { "symmetry_harmony": 0, "lighting_contrast": 0, "sharpness_detail": 0, "color_vitality": 0, "composition_presence": 0, "style_aura": 0 },
+        "left_scores": axis_schema,
+        "right_scores": axis_schema,
         "sections": {
             "overall_take": "",
             "strengths_left": "",
@@ -980,17 +1452,46 @@ fn vlm_json_prompt() -> String {
         }
     })).unwrap_or_default();
 
+    let axis_descriptions = AXIS_DEFINITIONS
+        .iter()
+        .map(|axis| format!("{}: {}", axis.key, axis.label))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let rubric = "Scoring rubric (0-100 per axis):\n\
+        - facial_symmetry: bilateral symmetry and harmony of facial features\n\
+        - facial_proportions: golden-ratio alignment, balanced feature placement (eye-nose-mouth-chin)\n\
+        - skin_quality: smoothness, evenness, absence of blemishes, healthy complexion\n\
+        - eye_expression: brightness, clarity, engagement, emotional presence of the eyes\n\
+        - hair_grooming: style quality, condition, how it frames the face\n\
+        - bone_structure: jawline definition, cheekbones, overall structural elegance\n\
+        - expression_charisma: warmth, confidence, personality conveyed through expression\n\
+        - lighting_color: photographic lighting quality, color harmony, skin tone rendering\n\
+        - background_framing: composition, background choice, subject isolation, bokeh\n\
+        - photogenic_impact: overall first-impression wow factor and memorability";
+
+    let language_instruction = match lang {
+        Language::Korean => "CRITICAL: Write ALL text fields (overall_take, strengths_left, strengths_right, weaknesses_left, weaknesses_right, why_this_won, model_jury_notes) in natural Korean (한국어). Use polite, descriptive Korean prose. Axis keys must remain in English.",
+        Language::Japanese => "CRITICAL: Write ALL text fields (overall_take, strengths_left, strengths_right, weaknesses_left, weaknesses_right, why_this_won, model_jury_notes) in natural Japanese (日本語). Use polite, descriptive Japanese prose. Axis keys must remain in English.",
+        Language::English => "Write all text fields in clear, descriptive English.",
+    };
+
     format!(
-        "You are BetterThanYou, a visual battle judge for fictional AI-generated adult portraits. \
-         Judge only image result and presentation quality. Return one winner and score both portraits on every axis from 0 to 100. \
-         Axes: {}. \
-         You MUST respond with ONLY a JSON object (no markdown, no explanation, no code fences) matching this exact schema:\n{}",
-        AXIS_DEFINITIONS.iter().map(|axis| format!("{}: {}", axis.key, axis.label)).collect::<Vec<_>>().join(", "),
-        schema_str
+        "You are BetterThanYou, a visual battle judge for AI-generated portrait photos. \
+         Evaluate the visual qualities of both portraits strictly based on what's visible in the images. \
+         Score each portrait on 10 axes from 0 to 100, then decide a winner.\n\n\
+         Axes: {axes}\n\n\
+         {rubric}\n\n\
+         {lang_instr}\n\n\
+         You MUST respond with ONLY a valid JSON object (no markdown, no explanation, no code fences) matching this schema:\n{schema}",
+        axes = axis_descriptions,
+        rubric = rubric,
+        lang_instr = language_instruction,
+        schema = schema_str,
     )
 }
 
-async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig) -> Result<OpenAiJudgeOutput> {
+async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
     let api_key = config.api_key.clone()
         .or_else(|| std::env::var("BTY_ANTHROPIC_API_KEY").ok())
         .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
@@ -999,7 +1500,7 @@ async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, mod
     let (left_media_type, left_b64) = parse_data_url(&left.image_data_url);
     let (right_media_type, right_b64) = parse_data_url(&right.image_data_url);
 
-    let prompt = vlm_json_prompt();
+    let prompt = vlm_json_prompt(lang);
 
     let body = json!({
         "model": model,
@@ -1050,7 +1551,7 @@ async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, mod
     })
 }
 
-async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig) -> Result<OpenAiJudgeOutput> {
+async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
     let api_key = config.api_key.clone()
         .or_else(|| std::env::var("BTY_GEMINI_API_KEY").ok())
         .or_else(|| std::env::var("GEMINI_API_KEY").ok())
@@ -1059,7 +1560,7 @@ async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model:
     let (left_media_type, left_b64) = parse_data_url(&left.image_data_url);
     let (right_media_type, right_b64) = parse_data_url(&right.image_data_url);
 
-    let prompt = vlm_json_prompt();
+    let prompt = vlm_json_prompt(lang);
 
     let body = json!({
         "contents": [{
@@ -1121,29 +1622,40 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
     let axis_definitions = axis_definitions_with_overrides(&options.axis_weights)?;
     let left = load_portrait(&options.left_source, options.left_label.as_deref(), "left").await?;
     let right = load_portrait(&options.right_source, options.right_label.as_deref(), "right").await?;
+    let lang = options.language;
 
+    // ── Always run heuristic first (fast, deterministic) ────────────────
+    let heuristic_left = score_portrait(&left, &axis_definitions);
+    let heuristic_right = score_portrait(&right, &axis_definitions);
+    let heuristic_side_scores = SideScores {
+        left: heuristic_left.clone(),
+        right: heuristic_right.clone(),
+    };
+
+    // ── Determine VLM provider ──────────────────────────────────────────
     let openai_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok()).or_else(|| std::env::var("OPENAI_API_KEY").ok()).is_some();
-    let anthropic_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_ANTHROPIC_API_KEY").ok()).or_else(|| std::env::var("ANTHROPIC_API_KEY").ok()).is_some();
-    let gemini_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_GEMINI_API_KEY").ok()).or_else(|| std::env::var("GEMINI_API_KEY").ok()).is_some();
+    let anthropic_key_present = std::env::var("BTY_ANTHROPIC_API_KEY").is_ok() || std::env::var("ANTHROPIC_API_KEY").is_ok();
+    let gemini_key_present = std::env::var("BTY_GEMINI_API_KEY").is_ok() || std::env::var("GEMINI_API_KEY").is_ok();
 
-    // Determine which VLM provider to try
     let vlm_mode = match options.judge_mode {
         JudgeMode::Openai => Some(JudgeMode::Openai),
         JudgeMode::Anthropic => Some(JudgeMode::Anthropic),
         JudgeMode::Gemini => Some(JudgeMode::Gemini),
         JudgeMode::Auto => {
-            if openai_key_present {
-                Some(JudgeMode::Openai)
-            } else if anthropic_key_present {
-                Some(JudgeMode::Anthropic)
-            } else if gemini_key_present {
-                Some(JudgeMode::Gemini)
-            } else {
-                None
-            }
+            if openai_key_present { Some(JudgeMode::Openai) }
+            else if anthropic_key_present { Some(JudgeMode::Anthropic) }
+            else if gemini_key_present { Some(JudgeMode::Gemini) }
+            else { None }
         }
         JudgeMode::Heuristic => None,
     };
+
+    // ── Try VLM if available ────────────────────────────────────────────
+    let mut vlm_output: Option<OpenAiJudgeOutput> = None;
+    let mut vlm_error: Option<String> = None;
+    let mut effective_mode = JudgeMode::Heuristic;
+    let mut effective_provider = String::from("local");
+    let mut effective_model: Option<String> = None;
 
     if let Some(mode) = vlm_mode {
         let judged = match mode {
@@ -1151,91 +1663,377 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
                 if let Some(override_result) = openai_override {
                     Ok(override_result)
                 } else {
-                    judge_with_openai(&left, &right, &options.openai_model, &options.openai_config).await
+                    judge_with_openai(&left, &right, &options.openai_model, &options.openai_config, lang).await
                 }
             }
             JudgeMode::Anthropic => {
-                judge_with_anthropic(&left, &right, &options.openai_model, &options.openai_config).await
+                judge_with_anthropic(&left, &right, &options.openai_model, &options.openai_config, lang).await
             }
             JudgeMode::Gemini => {
-                judge_with_gemini(&left, &right, &options.openai_model, &options.openai_config).await
+                judge_with_gemini(&left, &right, &options.openai_model, &options.openai_config, lang).await
             }
             _ => unreachable!(),
         };
 
         match judged {
             Ok(vlm) => {
-                let left_axes = vlm.left_scores.clone();
-                let right_axes = vlm.right_scores.clone();
-                let left_scores = ScoreBundle { axes: left_axes.clone(), total: round(compute_total_from_axes(&left_axes, &axis_definitions)), telemetry: None };
-                let right_scores = ScoreBundle { axes: right_axes.clone(), total: round(compute_total_from_axes(&right_axes, &axis_definitions)), telemetry: None };
-                return Ok(build_result(&left, &right, left_scores, right_scores, vlm.sections, mode, &vlm.provider, Some(vlm.model), Some(&vlm.winner_id), None));
+                effective_mode = mode;
+                effective_provider = vlm.provider.clone();
+                effective_model = Some(vlm.model.clone());
+                vlm_output = Some(vlm);
             }
             Err(error) if matches!(options.judge_mode, JudgeMode::Auto) => {
-                let left_scores = score_portrait(&left, &axis_definitions);
-                let right_scores = score_portrait(&right, &axis_definitions);
-                let axis_cards = build_axis_cards(&left_scores, &right_scores);
-                let winner_id = pick_winner(&left, &right, &left_scores, &right_scores, &axis_cards, None);
-                let winner = Winner {
-                    id: winner_id.clone(),
-                    label: if winner_id == "left" { left.label.clone() } else { right.label.clone() },
-                    total_score: if winner_id == "left" { left_scores.total } else { right_scores.total },
-                    opponent_score: if winner_id == "left" { right_scores.total } else { left_scores.total },
-                    margin: round((left_scores.total - right_scores.total).abs()),
-                    decisive: (left_scores.total - right_scores.total).abs() >= 6.0,
-                };
-                let sections = build_battle_narrative(&left, &right, &left_scores, &right_scores, &winner, &axis_cards);
-                return Ok(build_result(&left, &right, left_scores, right_scores, sections, JudgeMode::Heuristic, "local", None, None, Some(error.to_string())));
+                vlm_error = Some(error.to_string());
             }
             Err(error) => return Err(error),
         }
+    } else if matches!(options.judge_mode, JudgeMode::Auto) {
+        vlm_error = Some("No VLM API key detected. Using heuristic judge.".into());
     }
 
-    let left_scores = score_portrait(&left, &axis_definitions);
-    let right_scores = score_portrait(&right, &axis_definitions);
-    let axis_cards = build_axis_cards(&left_scores, &right_scores);
-    let winner_id = pick_winner(&left, &right, &left_scores, &right_scores, &axis_cards, None);
-    let winner = Winner {
-        id: winner_id.clone(),
-        label: if winner_id == "left" { left.label.clone() } else { right.label.clone() },
-        total_score: if winner_id == "left" { left_scores.total } else { right_scores.total },
-        opponent_score: if winner_id == "left" { right_scores.total } else { left_scores.total },
-        margin: round((left_scores.total - right_scores.total).abs()),
-        decisive: (left_scores.total - right_scores.total).abs() >= 6.0,
-    };
-    let sections = build_battle_narrative(&left, &right, &left_scores, &right_scores, &winner, &axis_cards);
-    Ok(build_result(&left, &right, left_scores, right_scores, sections, JudgeMode::Heuristic, "local", None, Some(&winner_id), if matches!(options.judge_mode, JudgeMode::Auto) { Some("No VLM API key detected. Using heuristic judge.".into()) } else { None }))
+    // ── Build dual scores and select official combined scores ───────────
+    let (final_left_scores, final_right_scores, dual_scores, sections, winner_hint): (ScoreBundle, ScoreBundle, Option<DualScores>, BattleSections, Option<String>) =
+        if let Some(vlm) = vlm_output.as_ref() {
+            // Build VLM side scores
+            let vlm_left_bundle = ScoreBundle {
+                axes: vlm.left_scores.clone(),
+                total: round(compute_total_from_axes(&vlm.left_scores, &axis_definitions)),
+                telemetry: None,
+            };
+            let vlm_right_bundle = ScoreBundle {
+                axes: vlm.right_scores.clone(),
+                total: round(compute_total_from_axes(&vlm.right_scores, &axis_definitions)),
+                telemetry: None,
+            };
+            let vlm_side_scores = SideScores { left: vlm_left_bundle.clone(), right: vlm_right_bundle.clone() };
+
+            // Combined = 30% heuristic + 70% VLM, preserving heuristic telemetry
+            let combined_left_axes = heuristic_left.axes.blend(&vlm_left_bundle.axes, 0.30, 0.70);
+            let combined_right_axes = heuristic_right.axes.blend(&vlm_right_bundle.axes, 0.30, 0.70);
+            let combined_left = ScoreBundle {
+                total: round(compute_total_from_axes(&combined_left_axes, &axis_definitions)),
+                axes: combined_left_axes,
+                telemetry: heuristic_left.telemetry.clone(),
+            };
+            let combined_right = ScoreBundle {
+                total: round(compute_total_from_axes(&combined_right_axes, &axis_definitions)),
+                axes: combined_right_axes,
+                telemetry: heuristic_right.telemetry.clone(),
+            };
+
+            let dual = DualScores {
+                heuristic: heuristic_side_scores.clone(),
+                vlm: Some(vlm_side_scores),
+            };
+            (combined_left, combined_right, Some(dual), vlm.sections.clone(), Some(vlm.winner_id.clone()))
+        } else {
+            let sections = {
+                let axis_cards_tmp = build_axis_cards(&heuristic_left, &heuristic_right);
+                let winner_id_tmp = pick_winner(&left, &right, &heuristic_left, &heuristic_right, &axis_cards_tmp, None);
+                let winner_tmp = Winner {
+                    id: winner_id_tmp.clone(),
+                    label: if winner_id_tmp == "left" { left.label.clone() } else { right.label.clone() },
+                    total_score: if winner_id_tmp == "left" { heuristic_left.total } else { heuristic_right.total },
+                    opponent_score: if winner_id_tmp == "left" { heuristic_right.total } else { heuristic_left.total },
+                    margin: round((heuristic_left.total - heuristic_right.total).abs()),
+                    decisive: (heuristic_left.total - heuristic_right.total).abs() >= 6.0,
+                };
+                build_battle_narrative(&left, &right, &heuristic_left, &heuristic_right, &winner_tmp, &axis_cards_tmp)
+            };
+            let dual = DualScores {
+                heuristic: heuristic_side_scores.clone(),
+                vlm: None,
+            };
+            (heuristic_left, heuristic_right, Some(dual), sections, None)
+        };
+
+    let mut result = build_result(
+        &left,
+        &right,
+        final_left_scores,
+        final_right_scores,
+        sections,
+        effective_mode,
+        &effective_provider,
+        effective_model,
+        winner_hint.as_deref(),
+        vlm_error,
+    );
+    result.dual_scores = dual_scores;
+    result.language = Some(match lang {
+        Language::English => "en".to_string(),
+        Language::Korean => "ko".to_string(),
+        Language::Japanese => "ja".to_string(),
+    });
+    Ok(result)
 }
 
 pub async fn analyze_portrait_battle(options: AnalyzeOptions) -> Result<BattleResult> {
     analyze_portrait_battle_with_override(options, None).await
 }
 
+/// Escape HTML-sensitive characters in dynamic text.
+fn html_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn lang_from_code(code: Option<&str>) -> Language {
+    match code {
+        Some("ko") => Language::Korean,
+        Some("ja") => Language::Japanese,
+        _ => Language::English,
+    }
+}
+
+/// Letter rank + CSS color class from a 0-100 score.
+fn score_rank_html(score: f32) -> (&'static str, &'static str) {
+    if score >= 95.0 { ("S+", "rank-splus") }
+    else if score >= 90.0 { ("S", "rank-s") }
+    else if score >= 80.0 { ("A", "rank-a") }
+    else if score >= 70.0 { ("B", "rank-b") }
+    else if score >= 60.0 { ("C", "rank-c") }
+    else if score >= 50.0 { ("D", "rank-d") }
+    else { ("F", "rank-f") }
+}
+
+/// One-line verdict summary based on margin size (localized).
+fn verdict_phrase(lang: Language, margin: f32, winner_label: &str, loser_label: &str) -> String {
+    let intensity = if margin >= 15.0 { "crushing" }
+        else if margin >= 8.0 { "clear" }
+        else if margin >= 4.0 { "controlled" }
+        else { "narrow" };
+    match (lang, intensity) {
+        (Language::Korean, "crushing") => format!("{}이(가) {}을(를) 압도적으로 이겼습니다", winner_label, loser_label),
+        (Language::Korean, "clear") => format!("{}이(가) {}보다 확실히 앞섰습니다", winner_label, loser_label),
+        (Language::Korean, "controlled") => format!("{}이(가) 안정적으로 {}을(를) 이겼습니다", winner_label, loser_label),
+        (Language::Korean, _) => format!("{}이(가) 근소한 차이로 {}을(를) 이겼습니다", winner_label, loser_label),
+        (Language::Japanese, "crushing") => format!("{}が{}を圧倒的に打ち破った", winner_label, loser_label),
+        (Language::Japanese, "clear") => format!("{}が{}を明確に上回った", winner_label, loser_label),
+        (Language::Japanese, "controlled") => format!("{}が{}を着実に制した", winner_label, loser_label),
+        (Language::Japanese, _) => format!("{}が{}をわずかに上回った", winner_label, loser_label),
+        (_, "crushing") => format!("{} CRUSHED {}", winner_label.to_uppercase(), loser_label.to_uppercase()),
+        (_, "clear") => format!("{} clearly outpaced {}", winner_label, loser_label),
+        (_, "controlled") => format!("{} controlled the battle over {}", winner_label, loser_label),
+        (_, _) => format!("{} narrowly edged out {}", winner_label, loser_label),
+    }
+}
+
 pub fn render_html_report(result: &BattleResult) -> String {
-    let axis_cards = result
+    let lang = lang_from_code(result.language.as_deref());
+    let lang_attr = match lang {
+        Language::Korean => "ko",
+        Language::Japanese => "ja",
+        Language::English => "en",
+    };
+
+    let left_is_winner = result.winner.id == "left";
+    let right_is_winner = result.winner.id == "right";
+
+    // ── Mini-stats strip rendered ABOVE each photo ──────────────────────
+    // Each side gets a 10-item mini grid with icon + short label + score.
+    let build_mini_stats = |side: &str| -> String {
+        let cells = result
+            .axis_cards
+            .iter()
+            .map(|card| {
+                let short = localized_axis_short(lang, &card.key);
+                let icon = axis_icon(&card.key);
+                let score = if side == "left" { card.left } else { card.right };
+                let (rank, rank_class) = score_rank_html(score);
+                let is_leader = card.leader == side;
+                let lead_class = if is_leader { "mini-lead" } else { "" };
+                format!(
+                    r#"<div class="mini-stat {lead}"><span class="mini-icon">{icon}</span><span class="mini-name">{name}</span><span class="mini-score">{score:.0}</span><span class="mini-rank {rank_class}">{rank}</span></div>"#,
+                    lead = lead_class,
+                    icon = icon,
+                    name = html_escape(&short),
+                    score = score,
+                    rank_class = rank_class,
+                    rank = rank,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        cells
+    };
+    let left_mini = build_mini_stats("left");
+    let right_mini = build_mini_stats("right");
+
+    // ── Detailed axis rows with icon, label, description, bars ──────────
+    let axis_bars = result
         .axis_cards
         .iter()
         .map(|card| {
+            let label = localized_axis_label(lang, &card.key);
+            let desc = localized_axis_desc(lang, &card.key);
+            let icon = axis_icon(&card.key);
+            let left_pct = card.left.clamp(0.0, 100.0);
+            let right_pct = card.right.clamp(0.0, 100.0);
+            let (left_rank, left_rank_class) = score_rank_html(card.left);
+            let (right_rank, right_rank_class) = score_rank_html(card.right);
+            let left_class = if card.leader == "left" { "bar bar-lead" } else { "bar" };
+            let right_class = if card.leader == "right" { "bar bar-lead" } else { "bar" };
+            let gap_text = if card.leader == "tie" {
+                "=".to_string()
+            } else if card.leader == result.winner.id {
+                format!("+{:.0}", card.diff)
+            } else {
+                format!("-{:.0}", card.diff)
+            };
+            let gap_class = if card.leader == "tie" {
+                "gap gap-tie"
+            } else if card.leader == result.winner.id {
+                "gap gap-win"
+            } else {
+                "gap gap-lose"
+            };
             format!(
-                r#"<article class="axis-card"><header><span>{}</span><strong>{:.1} pt gap</strong></header><div class="axis-values"><div><small>{}</small><b>{:.1}</b></div><div><small>{}</small><b>{:.1}</b></div></div></article>"#,
-                card.label,
-                card.diff,
-                result.inputs.left.label,
-                card.left,
-                result.inputs.right.label,
-                card.right,
+                r#"<article class="axis-row"><div class="axis-meta"><div class="axis-head"><span class="axis-icon">{icon}</span><span class="axis-name">{label}</span></div><div class="axis-desc">{desc}</div></div><div class="axis-track"><div class="axis-side"><span class="axis-rank {lrc}">{lrank}</span><span class="axis-num">{left_num:.1}</span><div class="{lbar}" style="width:{left_pct}%"></div></div><div class="{gc}">{gap}</div><div class="axis-side axis-side-right"><div class="{rbar}" style="width:{right_pct}%"></div><span class="axis-num">{right_num:.1}</span><span class="axis-rank {rrc}">{rrank}</span></div></div></article>"#,
+                icon = icon,
+                label = html_escape(&label),
+                desc = html_escape(&desc),
+                lrank = left_rank, lrc = left_rank_class,
+                rrank = right_rank, rrc = right_rank_class,
+                left_num = card.left,
+                right_num = card.right,
+                left_pct = left_pct,
+                right_pct = right_pct,
+                lbar = left_class,
+                rbar = right_class,
+                gc = gap_class,
+                gap = gap_text,
             )
         })
         .collect::<Vec<_>>()
         .join("");
 
+    // ── Dual score dashboard ────────────────────────────────────────────
+    let dual_dashboard = if let Some(dual) = result.dual_scores.as_ref() {
+        let heuristic_block = format!(
+            r#"<div class="dual-block"><div class="dual-header"><span class="dual-icon">⚙</span><span>{title}</span></div><div class="dual-scores"><div class="dual-score"><small>{left_label}</small><strong>{left_total:.1}</strong></div><div class="dual-vs">VS</div><div class="dual-score"><small>{right_label}</small><strong>{right_total:.1}</strong></div></div></div>"#,
+            title = html_escape(t(lang, "report_heuristic")),
+            left_label = html_escape(&result.inputs.left.label),
+            right_label = html_escape(&result.inputs.right.label),
+            left_total = dual.heuristic.left.total,
+            right_total = dual.heuristic.right.total,
+        );
+
+        let vlm_block = if let Some(vlm) = dual.vlm.as_ref() {
+            format!(
+                r#"<div class="dual-block"><div class="dual-header"><span class="dual-icon">✦</span><span>{title}</span></div><div class="dual-scores"><div class="dual-score"><small>{left_label}</small><strong>{left_total:.1}</strong></div><div class="dual-vs">VS</div><div class="dual-score"><small>{right_label}</small><strong>{right_total:.1}</strong></div></div></div>"#,
+                title = html_escape(t(lang, "report_vlm")),
+                left_label = html_escape(&result.inputs.left.label),
+                right_label = html_escape(&result.inputs.right.label),
+                left_total = vlm.left.total,
+                right_total = vlm.right.total,
+            )
+        } else {
+            String::new()
+        };
+
+        format!(
+            r#"<section class="dual-dashboard">{heuristic}{vlm}</section>"#,
+            heuristic = heuristic_block,
+            vlm = vlm_block,
+        )
+    } else {
+        String::new()
+    };
+
+    // ── Per-portrait strengths/weaknesses cards ─────────────────────────
+    let portrait_analysis = format!(
+        r#"<section class="portrait-analysis"><h2 class="section-title">{title}</h2><div class="portrait-grid"><article class="portrait-card {left_winner_class}"><header class="portrait-header"><span class="side-tag tag-left">{left_tag}</span><h3>{left_label}</h3></header><div class="pa-block"><div class="pa-label">✅ {strengths}</div><p>{left_str}</p></div><div class="pa-block"><div class="pa-label">⚠ {weaknesses}</div><p>{left_weak}</p></div></article><article class="portrait-card {right_winner_class}"><header class="portrait-header"><span class="side-tag tag-right">{right_tag}</span><h3>{right_label}</h3></header><div class="pa-block"><div class="pa-label">✅ {strengths}</div><p>{right_str}</p></div><div class="pa-block"><div class="pa-label">⚠ {weaknesses}</div><p>{right_weak}</p></div></article></div></section>"#,
+        title = html_escape(t(lang, "report_portrait_analysis")),
+        left_winner_class = if left_is_winner { "is-winner" } else { "" },
+        right_winner_class = if right_is_winner { "is-winner" } else { "" },
+        left_tag = html_escape(t(lang, "report_left")),
+        right_tag = html_escape(t(lang, "report_right")),
+        left_label = html_escape(&result.inputs.left.label),
+        right_label = html_escape(&result.inputs.right.label),
+        strengths = html_escape(t(lang, "report_strengths")),
+        weaknesses = html_escape(t(lang, "report_weaknesses")),
+        left_str = html_escape(&result.sections.strengths.left),
+        right_str = html_escape(&result.sections.strengths.right),
+        left_weak = html_escape(&result.sections.weaknesses.left),
+        right_weak = html_escape(&result.sections.weaknesses.right),
+    );
+
+    let decisive_badge = if result.winner.decisive {
+        format!(r#"<span class="decisive-badge">{}</span>"#, html_escape(t(lang, "report_decisive")))
+    } else {
+        String::new()
+    };
+
+    let (winner_rank, winner_rank_class) = score_rank_html(result.winner.total_score);
+    let (loser_rank, loser_rank_class) = score_rank_html(result.winner.opponent_score);
+    let (left_rank_str, left_rank_class_str) = score_rank_html(result.scores.left.total);
+    let (right_rank_str, right_rank_class_str) = score_rank_html(result.scores.right.total);
+    let loser_label = if left_is_winner { &result.inputs.right.label } else { &result.inputs.left.label };
+    let verdict = verdict_phrase(lang, result.winner.margin, &result.winner.label, loser_label);
+
+    // ── Summary counts ──────────────────────────────────────────────────
+    let left_wins_count = result.axis_cards.iter().filter(|c| c.leader == "left").count();
+    let right_wins_count = result.axis_cards.iter().filter(|c| c.leader == "right").count();
+    let tie_count = result.axis_cards.iter().filter(|c| c.leader == "tie").count();
+
+    // ── Summary comparison table ────────────────────────────────────────
+    let summary_table = {
+        let rows = result.axis_cards.iter().map(|card| {
+            let icon = axis_icon(&card.key);
+            let label = localized_axis_label(lang, &card.key);
+            let (lr, lrc) = score_rank_html(card.left);
+            let (rr, rrc) = score_rank_html(card.right);
+            let winner_cell = if card.leader == "tie" {
+                format!(r#"<td class="sum-winner sum-tie">=</td>"#)
+            } else if card.leader == "left" {
+                format!(r#"<td class="sum-winner sum-left">◀</td>"#)
+            } else {
+                format!(r#"<td class="sum-winner sum-right">▶</td>"#)
+            };
+            let left_class = if card.leader == "left" { "sum-lead" } else { "" };
+            let right_class = if card.leader == "right" { "sum-lead" } else { "" };
+            format!(
+                r#"<tr><td class="sum-axis"><span class="sum-icon">{icon}</span><span>{label}</span></td><td class="sum-num {lc}">{ln:.1} <span class="rank-mini {lrc}">{lr}</span></td>{wc}<td class="sum-num {rc}">{rn:.1} <span class="rank-mini {rrc}">{rr}</span></td><td class="sum-gap">{gap}</td></tr>"#,
+                icon = icon,
+                label = html_escape(&label),
+                lc = left_class,
+                ln = card.left,
+                lr = lr, lrc = lrc,
+                wc = winner_cell,
+                rc = right_class,
+                rn = card.right,
+                rr = rr, rrc = rrc,
+                gap = if card.leader == "tie" { "—".to_string() } else { format!("{:.1}", card.diff) },
+            )
+        }).collect::<Vec<_>>().join("");
+
+        let left_label_esc = html_escape(&result.inputs.left.label);
+        let right_label_esc = html_escape(&result.inputs.right.label);
+        format!(
+            r#"<section><h2 class="section-title">📊 {title}</h2><table class="summary-table"><thead><tr><th>Axis</th><th>{l} <small>{lw} wins</small></th><th></th><th>{r} <small>{rw} wins</small></th><th>Gap</th></tr></thead><tbody>{rows}</tbody></table><p class="summary-caption">{tie_count} ties • Margin: {margin:.1} points</p></section>"#,
+            title = html_escape(t(lang, "report_ability_comparison")),
+            l = left_label_esc,
+            r = right_label_esc,
+            lw = left_wins_count,
+            rw = right_wins_count,
+            rows = rows,
+            tie_count = tie_count,
+            margin = result.winner.margin,
+        )
+    };
+
     format!(
         r#"<!doctype html>
-<html lang="en">
+<html lang="{lang_attr}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{product} • {left} vs {right}</title>
+    <title>{product} ⚔ {winner_name} wins • {left} vs {right}</title>
     <style>
       :root {{
         --bg: #0a0d13;
@@ -1246,122 +2044,412 @@ pub fn render_html_report(result: &BattleResult) -> String {
         --accent: #ff8f42;
         --accent-2: #63ebd3;
         --winner: #ffd36b;
+        --left-color: #ff8f42;
+        --right-color: #64b4ff;
+        --green: #50ff78;
+        --red: #ff4646;
+        --rank-splus: #ffb3ff;
+        --rank-s: #ffd36b;
+        --rank-a: #50ff78;
+        --rank-b: #63ebd3;
+        --rank-c: #ff8f42;
+        --rank-d: #ff8080;
+        --rank-f: #666;
       }}
       * {{ box-sizing: border-box; }}
       body {{
         margin: 0;
         min-height: 100vh;
         color: var(--text);
-        font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+        font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans JP", sans-serif;
         background:
           radial-gradient(circle at top left, rgba(255,143,66,0.24), transparent 36%),
           radial-gradient(circle at right center, rgba(99,235,211,0.14), transparent 28%),
           linear-gradient(145deg, #090b10 0%, #121824 100%);
       }}
       .shell {{
-        width: min(1180px, calc(100vw - 32px));
+        width: min(1240px, calc(100vw - 32px));
         margin: 0 auto;
         padding: 28px 0 56px;
       }}
-      .hero, .score-panel, .axis-card, .narrative-block, .input-card {{
+      .hero, .axis-row, .narrative-block, .portrait-card, .dual-block {{
         border: 1px solid var(--line);
-        border-radius: 24px;
+        border-radius: 20px;
         background: var(--panel);
         backdrop-filter: blur(14px);
       }}
-      .hero {{ padding: 28px; box-shadow: 0 24px 70px rgba(0,0,0,0.35); }}
+      .hero {{ padding: 28px; box-shadow: 0 24px 70px rgba(0,0,0,0.35); margin-bottom: 22px; text-align: center; }}
       .eyebrow {{ text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: var(--muted); }}
       .winner-pill {{
         display: inline-flex;
-        padding: 10px 16px;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 18px;
         border-radius: 999px;
-        background: rgba(255, 211, 107, 0.12);
+        background: rgba(255, 211, 107, 0.14);
         color: var(--winner);
-        margin-bottom: 12px;
+        margin: 12px 0 8px;
+        font-weight: 600;
       }}
-      h1 {{ margin: 0; font-size: clamp(42px, 7vw, 88px); line-height: 0.92; text-transform: uppercase; }}
-      p {{ line-height: 1.7; color: var(--muted); }}
-      .totals, .inputs, .axis-grid, .narrative-grid {{ display: grid; gap: 16px; }}
-      .totals {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 18px; }}
-      .inputs {{ grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 22px; }}
-      .axis-grid, .narrative-grid {{ grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 18px; }}
-      .score-panel, .axis-card, .narrative-block {{ padding: 18px; }}
-      .score-panel strong {{ display: block; font-size: 40px; margin-top: 8px; color: var(--text); }}
-      .axis-card header, .axis-values {{ display: flex; justify-content: space-between; gap: 12px; }}
-      .axis-card header {{ margin-bottom: 14px; }}
-      .axis-values small, .score-panel small {{ color: var(--muted); display: block; }}
-      .input-card {{ overflow: hidden; }}
-      .input-card img {{ display: block; width: 100%; aspect-ratio: 4/5; object-fit: cover; }}
-      .input-copy {{ padding: 18px; }}
-      .input-copy h2, .narrative-block h3 {{ margin: 0 0 8px; }}
-      footer {{ margin-top: 22px; color: var(--muted); font-size: 14px; }}
+      .decisive-badge {{
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--red);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        margin-left: 8px;
+      }}
+      h1 {{ margin: 6px 0 4px; font-size: clamp(36px, 6vw, 72px); line-height: 0.95; text-transform: uppercase; color: var(--winner); }}
+      h2.section-title {{ margin: 26px 0 12px; font-size: 18px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text); display: flex; align-items: center; gap: 10px; }}
+      h2.section-title::before {{ content: ""; width: 4px; height: 20px; background: var(--accent); border-radius: 2px; }}
+      p {{ line-height: 1.7; color: var(--muted); margin: 0; }}
+      .verdict {{ font-size: 15px; color: var(--muted); margin-top: 6px; }}
+      .rank-badge-big {{ display: inline-block; padding: 4px 14px; border-radius: 999px; font-weight: 800; font-size: 18px; margin: 0 6px; }}
+      .rank-splus {{ background: rgba(255,179,255,0.2); color: var(--rank-splus); border: 1px solid var(--rank-splus); }}
+      .rank-s {{ background: rgba(255,211,107,0.2); color: var(--rank-s); border: 1px solid var(--rank-s); }}
+      .rank-a {{ background: rgba(80,255,120,0.2); color: var(--rank-a); border: 1px solid var(--rank-a); }}
+      .rank-b {{ background: rgba(99,235,211,0.2); color: var(--rank-b); border: 1px solid var(--rank-b); }}
+      .rank-c {{ background: rgba(255,143,66,0.2); color: var(--rank-c); border: 1px solid var(--rank-c); }}
+      .rank-d {{ background: rgba(255,128,128,0.2); color: var(--rank-d); border: 1px solid var(--rank-d); }}
+      .rank-f {{ background: rgba(100,100,100,0.2); color: var(--rank-f); border: 1px solid var(--rank-f); }}
+
+      /* ── Battle Card: photos with stats strip on top ───────── */
+      .battle-card {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 22px;
+      }}
+      .battle-side {{
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        overflow: hidden;
+        background: var(--panel);
+        position: relative;
+      }}
+      .battle-side.is-winner {{
+        border: 2px solid var(--winner);
+        box-shadow: 0 0 30px rgba(255, 211, 107, 0.25);
+      }}
+
+      /* Name header above stats */
+      .side-header {{
+        padding: 14px 18px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        background: linear-gradient(180deg, rgba(25,30,45,0.95) 0%, rgba(20,25,38,0.95) 100%);
+      }}
+      .side-name {{
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--text);
+        word-break: break-all;
+      }}
+      .side-header .side-tag {{ flex-shrink: 0; }}
+      .side-total {{
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 0 18px 12px;
+        background: linear-gradient(180deg, rgba(20,25,38,0.95) 0%, rgba(15,18,28,0.95) 100%);
+      }}
+      .side-total-label {{ font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }}
+      .side-total-value {{ font-size: 44px; font-weight: 900; color: var(--winner); font-variant-numeric: tabular-nums; line-height: 1; }}
+      .side-total-rank {{ margin-left: 6px; }}
+
+      /* Mini-stats strip */
+      .mini-stats {{
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 3px;
+        padding: 10px;
+        background: rgba(15,18,28,0.95);
+        border-top: 1px solid var(--line);
+        border-bottom: 2px solid var(--accent);
+      }}
+      .mini-stat {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 7px 3px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.03);
+      }}
+      .mini-stat.mini-lead {{ background: rgba(80,255,120,0.15); box-shadow: inset 0 0 0 1px rgba(80,255,120,0.4); }}
+      .mini-icon {{ font-size: 16px; line-height: 1; }}
+      .mini-name {{ font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }}
+      .mini-score {{ font-size: 15px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }}
+      .mini-rank {{ font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 6px; }}
+
+      /* Photo frame — use contain so full face is visible */
+      .photo-wrap {{
+        position: relative;
+        background: #000;
+        min-height: 400px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }}
+      .photo-wrap img {{
+        display: block;
+        max-width: 100%;
+        max-height: 580px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+      }}
+      .crown {{
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        font-size: 32px;
+        filter: drop-shadow(0 2px 8px rgba(0,0,0,0.9));
+        z-index: 2;
+      }}
+      .side-tag {{
+        display: inline-block;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+      }}
+      .tag-left {{ background: var(--left-color); color: #000; }}
+      .tag-right {{ background: var(--right-color); color: #000; }}
+
+      /* ── Dual Score Dashboard ──────────────────────────────── */
+      .dual-dashboard {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 14px;
+        margin-bottom: 22px;
+      }}
+      .dual-block {{ padding: 18px 22px; }}
+      .dual-header {{ display: flex; align-items: center; gap: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 12px; }}
+      .dual-icon {{ color: var(--accent-2); font-size: 18px; }}
+      .dual-scores {{ display: flex; align-items: center; justify-content: space-between; gap: 12px; }}
+      .dual-score {{ text-align: center; flex: 1; }}
+      .dual-score small {{ display: block; color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }}
+      .dual-score strong {{ font-size: 32px; font-weight: 800; color: var(--text); }}
+      .dual-vs {{ color: var(--accent); font-weight: 700; font-size: 14px; letter-spacing: 0.15em; }}
+
+      /* ── Summary Comparison Table ───────────────────────────── */
+      .summary-table {{
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        background: var(--panel);
+      }}
+      .summary-table th, .summary-table td {{ padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); font-size: 14px; }}
+      .summary-table tr:last-child td {{ border-bottom: none; }}
+      .summary-table th {{
+        background: rgba(25,30,45,0.95);
+        color: var(--accent);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-weight: 700;
+      }}
+      .summary-table th small {{ display: block; color: var(--muted); font-size: 10px; font-weight: 500; margin-top: 2px; }}
+      .sum-axis {{ display: flex; align-items: center; gap: 8px; font-weight: 600; }}
+      .sum-icon {{ font-size: 16px; }}
+      .sum-num {{ font-variant-numeric: tabular-nums; font-weight: 600; }}
+      .sum-num.sum-lead {{ color: var(--green); }}
+      .sum-winner {{ text-align: center; font-weight: 800; width: 40px; }}
+      .sum-left {{ color: var(--left-color); }}
+      .sum-right {{ color: var(--right-color); }}
+      .sum-tie {{ color: var(--accent-2); }}
+      .sum-gap {{ font-variant-numeric: tabular-nums; color: var(--muted); width: 60px; text-align: right; }}
+      .rank-mini {{ display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 5px; margin-left: 4px; font-weight: 700; }}
+      .summary-caption {{ margin-top: 10px; font-size: 13px; color: var(--muted); text-align: center; }}
+
+      /* ── Detailed Axis Rows ────────────────────────────────── */
+      .axis-row {{
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        gap: 18px;
+        align-items: center;
+        padding: 14px 20px;
+        margin-bottom: 8px;
+      }}
+      .axis-meta {{ display: flex; flex-direction: column; gap: 3px; }}
+      .axis-head {{ display: flex; align-items: center; gap: 8px; }}
+      .axis-icon {{ font-size: 18px; }}
+      .axis-name {{ font-weight: 700; font-size: 14px; color: var(--text); }}
+      .axis-desc {{ font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }}
+      .axis-track {{ display: grid; grid-template-columns: 1fr 52px 1fr; align-items: center; gap: 10px; }}
+      .axis-side {{ display: flex; align-items: center; gap: 6px; }}
+      .axis-side:not(.axis-side-right) {{ justify-content: flex-end; }}
+      .axis-num {{ font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); min-width: 30px; text-align: right; }}
+      .axis-side-right .axis-num {{ text-align: left; }}
+      .axis-rank {{ font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 5px; }}
+      .bar {{
+        height: 10px;
+        border-radius: 5px;
+        background: linear-gradient(90deg, rgba(255,143,66,0.5), rgba(255,143,66,0.85));
+        min-width: 2%;
+      }}
+      .axis-side-right .bar {{ background: linear-gradient(90deg, rgba(100,180,255,0.85), rgba(100,180,255,0.5)); }}
+      .bar-lead {{ background: linear-gradient(90deg, rgba(80,255,120,0.7), rgba(80,255,120,1)) !important; }}
+      .gap {{
+        text-align: center;
+        font-weight: 700;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }}
+      .gap-win {{ color: var(--green); }}
+      .gap-lose {{ color: var(--red); }}
+      .gap-tie {{ color: var(--accent-2); }}
+
+      /* ── Portrait Analysis Cards ──────────────────────────── */
+      .portrait-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }}
+      .portrait-card {{ padding: 22px; }}
+      .portrait-card.is-winner {{ border-color: var(--winner); box-shadow: 0 0 0 1px var(--winner); }}
+      .portrait-header {{ display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }}
+      .portrait-header h3 {{ margin: 0; font-size: 22px; }}
+      .pa-block {{ margin-bottom: 14px; }}
+      .pa-label {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 4px; font-weight: 700; }}
+      .pa-block p {{ color: var(--text); font-size: 14px; }}
+
+      /* ── Narrative Blocks ──────────────────────────────────── */
+      .narrative-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 12px; }}
+      .narrative-block {{ padding: 20px; }}
+      .narrative-block h3 {{ margin: 0 0 10px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); }}
+      .narrative-block p {{ color: var(--text); font-size: 14px; }}
+
+      footer {{ margin-top: 30px; color: var(--muted); font-size: 13px; text-align: center; }}
+
+      @media (max-width: 720px) {{
+        .battle-card {{ grid-template-columns: 1fr; }}
+        .axis-row {{ grid-template-columns: 1fr; }}
+        .mini-stats {{ grid-template-columns: repeat(5, 1fr); }}
+      }}
     </style>
   </head>
   <body>
     <main class="shell">
       <section class="hero">
-        <div class="eyebrow">winner first • {judge}</div>
-        <div class="winner-pill">Winner • {winner}</div>
-        <h1>{winner}</h1>
-        <p>{overall}</p>
-        <div class="totals">
-          <article class="score-panel"><small>{left}</small><strong>{left_total:.1}</strong></article>
-          <article class="score-panel"><small>{right}</small><strong>{right_total:.1}</strong></article>
-          <article class="score-panel"><small>Judge</small><strong>{judge}</strong></article>
+        <div class="eyebrow">{product} • {judge}</div>
+        <div class="winner-pill">🏆 {winner_label_text} • {winner_name}{decisive}</div>
+        <h1>{winner_name} <span class="rank-badge-big {wrc}">{wrank}</span></h1>
+        <p class="verdict">{verdict}</p>
+        <p style="margin-top:10px;">{winner_name} <strong style="color:var(--winner);">{winner_total:.1}</strong> vs {loser_label} <strong style="color:var(--muted);">{loser_total:.1}</strong> <span class="rank-badge-big {lrc}">{lrank}</span></p>
+      </section>
+
+      <section class="battle-card">
+        <div class="battle-side {left_winner_class}">
+          <div class="side-header">
+            <span class="side-name">{left}</span>
+            <span class="side-tag tag-left">◀ {left_tag}</span>
+          </div>
+          <div class="side-total">
+            <span class="side-total-label">{score_label}</span>
+            <span class="side-total-value">{left_total:.1}</span>
+            <span class="rank-badge-big {left_rank_class} side-total-rank">{left_rank}</span>
+          </div>
+          <div class="mini-stats">{left_mini}</div>
+          <div class="photo-wrap">
+            {left_crown}
+            <img alt="{left}" src="{left_src}" />
+          </div>
+        </div>
+        <div class="battle-side {right_winner_class}">
+          <div class="side-header">
+            <span class="side-name">{right}</span>
+            <span class="side-tag tag-right">{right_tag} ▶</span>
+          </div>
+          <div class="side-total">
+            <span class="side-total-label">{score_label}</span>
+            <span class="side-total-value">{right_total:.1}</span>
+            <span class="rank-badge-big {right_rank_class} side-total-rank">{right_rank}</span>
+          </div>
+          <div class="mini-stats">{right_mini}</div>
+          <div class="photo-wrap">
+            {right_crown}
+            <img alt="{right}" src="{right_src}" />
+          </div>
         </div>
       </section>
 
-      <section class="inputs">
-        <article class="input-card">
-          <img alt="{left}" src="{left_src}" />
-          <div class="input-copy">
-            <h2>{left}</h2>
-            <p>{left_strength}</p>
-          </div>
-        </article>
-        <article class="input-card">
-          <img alt="{right}" src="{right_src}" />
-          <div class="input-copy">
-            <h2>{right}</h2>
-            <p>{right_strength}</p>
-          </div>
-        </article>
-      </section>
+      {dual_dashboard}
+
+      {summary_table}
 
       <section>
-        <div class="eyebrow">ability comparison</div>
-        <div class="axis-grid">{axis_cards}</div>
+        <h2 class="section-title">📐 {detail_title}</h2>
+        <div class="axis-list">{axis_bars}</div>
       </section>
 
+      {portrait_analysis}
+
       <section>
-        <div class="eyebrow">analysis</div>
+        <h2 class="section-title">{analysis_title}</h2>
         <div class="narrative-grid">
-          <section class="narrative-block"><h3>Overall Take</h3><p>{overall}</p></section>
-          <section class="narrative-block"><h3>Why This Won</h3><p>{why}</p></section>
-          <section class="narrative-block"><h3>Model Jury Notes</h3><p>{notes}</p></section>
+          <section class="narrative-block"><h3>💬 {overall_take_title}</h3><p>{overall}</p></section>
+          <section class="narrative-block"><h3>🏆 {why_title}</h3><p>{why}</p></section>
+          <section class="narrative-block"><h3>📝 {jury_title}</h3><p>{notes}</p></section>
         </div>
       </section>
 
-      <footer>Generated {created_at} • {product}</footer>
+      <footer>{generated_label} {created_at} • {product}</footer>
     </main>
   </body>
 </html>"#,
+        lang_attr = lang_attr,
         product = PRODUCT_NAME,
-        left = result.inputs.left.label,
-        right = result.inputs.right.label,
-        winner = result.winner.label,
-        judge = result.engine.model.clone().unwrap_or_else(|| result.engine.judge_mode.clone()),
-        overall = result.sections.overall_take,
-        why = result.sections.why_this_won,
-        notes = result.sections.model_jury_notes,
+        left = html_escape(&result.inputs.left.label),
+        right = html_escape(&result.inputs.right.label),
+        winner_name = html_escape(&result.winner.label),
+        loser_label = html_escape(loser_label),
+        winner_total = result.winner.total_score,
+        loser_total = result.winner.opponent_score,
+        wrank = winner_rank, wrc = winner_rank_class,
+        lrank = loser_rank, lrc = loser_rank_class,
+        verdict = html_escape(&verdict),
+        winner_label_text = html_escape(t(lang, "report_winner")),
+        score_label = html_escape(t(lang, "report_score")),
+        judge = html_escape(&result.engine.model.clone().unwrap_or_else(|| result.engine.judge_mode.clone())),
+        overall = html_escape(&result.sections.overall_take),
+        why = html_escape(&result.sections.why_this_won),
+        notes = html_escape(&result.sections.model_jury_notes),
         left_total = result.scores.left.total,
         right_total = result.scores.right.total,
         left_src = result.inputs.left.image_data_url,
         right_src = result.inputs.right.image_data_url,
-        left_strength = result.sections.strengths.left,
-        right_strength = result.sections.strengths.right,
+        left_tag = html_escape(t(lang, "report_left")),
+        right_tag = html_escape(t(lang, "report_right")),
+        left_mini = left_mini,
+        right_mini = right_mini,
+        left_rank = left_rank_str,
+        left_rank_class = left_rank_class_str,
+        right_rank = right_rank_str,
+        right_rank_class = right_rank_class_str,
+        left_winner_class = if left_is_winner { "is-winner" } else { "" },
+        right_winner_class = if right_is_winner { "is-winner" } else { "" },
+        left_crown = if left_is_winner { r#"<div class="crown">👑</div>"# } else { "" },
+        right_crown = if right_is_winner { r#"<div class="crown">👑</div>"# } else { "" },
+        decisive = decisive_badge,
+        dual_dashboard = dual_dashboard,
+        summary_table = summary_table,
+        detail_title = html_escape(t(lang, "report_ability_comparison")),
+        analysis_title = html_escape(t(lang, "report_jury_notes")),
+        overall_take_title = html_escape(t(lang, "report_overall_take")),
+        why_title = html_escape(t(lang, "report_why_won")),
+        jury_title = html_escape(t(lang, "report_jury_notes")),
+        generated_label = html_escape(t(lang, "report_generated")),
         created_at = result.created_at,
-        axis_cards = axis_cards,
+        axis_bars = axis_bars,
+        portrait_analysis = portrait_analysis,
     )
 }
 
@@ -1371,7 +2459,15 @@ pub fn default_reports_dir() -> PathBuf {
 
 pub fn save_battle_artifacts(result: &BattleResult, output_dir: &Path) -> Result<SavedArtifacts> {
     fs::create_dir_all(output_dir)?;
-    let stem = format!("{}-{}", Utc::now().format("%Y-%m-%dt%H-%M-%S-%3fz"), slugify(&format!("{}-{}", result.inputs.left.label, result.inputs.right.label)));
+    // Filename encodes the winner side so it's obvious at a glance.
+    // Format: {timestamp}-{winner-side}-wins-{left}-vs-{right}
+    let winner_side = &result.winner.id; // "left" or "right"
+    let stem = format!(
+        "{}-{}-wins-{}",
+        Utc::now().format("%Y-%m-%dt%H-%M-%S-%3fz"),
+        winner_side,
+        slugify(&format!("{}-vs-{}", result.inputs.left.label, result.inputs.right.label)),
+    );
     let html_path = output_dir.join(format!("{}.html", stem));
     let json_path = output_dir.join(format!("{}.json", stem));
     let latest_html = output_dir.join("latest-battle.html");
@@ -1459,14 +2555,39 @@ fn draw_text_8x8(image: &mut RgbaImage, x: u32, y: u32, text: &str, color: Rgba<
 }
 
 fn share_caption(result: &BattleResult, platform: &str) -> String {
-    let core = format!("{} beats {} on BetterThanYou. Winner: {}. Margin: {:.1}.", result.inputs.left.label, result.inputs.right.label, result.winner.label, result.winner.margin);
+    // Pick top-3 axes the winner led in for a juicy caption
+    let mut lead_axes: Vec<&AxisCard> = result.axis_cards.iter().filter(|c| c.leader == result.winner.id).collect();
+    lead_axes.sort_by(|a, b| b.diff.partial_cmp(&a.diff).unwrap_or(std::cmp::Ordering::Equal));
+    let top_axes_text = lead_axes
+        .iter()
+        .take(3)
+        .map(|c| format!("{} {}", axis_icon(&c.key), c.label))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let (rank, _) = score_rank_html(result.winner.total_score);
+    let decisive_suffix = if result.winner.decisive { " 🔥 DECISIVE WIN" } else { "" };
+
+    let core = format!(
+        "🏆 {} wins the BetterThanYou portrait battle!\n\n⚔️ {} ({:.1}) vs {} ({:.1})\n📊 Margin: +{:.1} pts · Rank {}{}\n✨ Top strengths: {}",
+        result.winner.label,
+        result.inputs.left.label,
+        result.scores.left.total,
+        result.inputs.right.label,
+        result.scores.right.total,
+        result.winner.margin,
+        rank,
+        decisive_suffix,
+        if top_axes_text.is_empty() { "balanced across the board".into() } else { top_axes_text },
+    );
+
     match platform {
-        "x" => format!("{} #BetterThanYou #AIPortraits", core),
-        "linkedin" => format!("{} Winner-first portrait battle result generated with BetterThanYou.", core),
-        "instagram_post" => format!("{} Portrait battle result. Upload the saved card to your feed.", core),
-        "instagram_story" => format!("{} Story-ready asset generated by BetterThanYou.", core),
-        "tiktok" => format!("{} Use the story-size card as a cover or upload asset.", core),
-        "pinterest" => format!("{} Pin-ready vertical asset generated by BetterThanYou.", core),
+        "x" => format!("{}\n\n#BetterThanYou #AIPortraits #PortraitBattle", core),
+        "linkedin" => format!("{}\n\nGenerated with BetterThanYou — CLI portrait battle tool. #AI #Portraits", core),
+        "instagram_post" => format!("{}\n\n#BetterThanYou #PortraitBattle #AIPortraits #AIArt", core),
+        "instagram_story" => format!("{}\n\n#BetterThanYou", core),
+        "tiktok" => format!("{}\n\n#BetterThanYou #AIPortraits #FYP", core),
+        "pinterest" => format!("{}\n\nBetterThanYou portrait battle.", core),
         _ => core,
     }
 }
@@ -1629,6 +2750,7 @@ mod tests {
             openai_model: DEFAULT_OPENAI_MODEL.into(),
             openai_config: OpenAiConfig::default(),
             axis_weights: Vec::new(),
+            language: Language::English,
         }).await.unwrap();
 
         let result_b = analyze_portrait_battle(AnalyzeOptions {
@@ -1640,10 +2762,11 @@ mod tests {
             openai_model: DEFAULT_OPENAI_MODEL.into(),
             openai_config: OpenAiConfig::default(),
             axis_weights: Vec::new(),
+            language: Language::English,
         }).await.unwrap();
 
         assert_eq!(result_a.winner.id, result_b.winner.id);
-        assert_eq!(result_a.axis_cards.len(), 6);
+        assert_eq!(result_a.axis_cards.len(), 10);
     }
 
     #[tokio::test]
@@ -1663,15 +2786,24 @@ mod tests {
             openai_model: DEFAULT_OPENAI_MODEL.into(),
             openai_config: OpenAiConfig::default(),
             axis_weights: Vec::new(),
+            language: Language::English,
         }, Some(OpenAiJudgeOutput {
             winner_id: "right".into(),
-            left_scores: AxisScores { symmetry_harmony: 70.0, lighting_contrast: 61.0, sharpness_detail: 55.0, color_vitality: 52.0, composition_presence: 68.0, style_aura: 64.0 },
-            right_scores: AxisScores { symmetry_harmony: 82.0, lighting_contrast: 84.0, sharpness_detail: 72.0, color_vitality: 91.0, composition_presence: 88.0, style_aura: 90.0 },
+            left_scores: AxisScores {
+                facial_symmetry: 70.0, facial_proportions: 65.0, skin_quality: 62.0, eye_expression: 58.0,
+                hair_grooming: 60.0, bone_structure: 64.0, expression_charisma: 55.0, lighting_color: 61.0,
+                background_framing: 68.0, photogenic_impact: 57.0,
+            },
+            right_scores: AxisScores {
+                facial_symmetry: 82.0, facial_proportions: 84.0, skin_quality: 86.0, eye_expression: 88.0,
+                hair_grooming: 80.0, bone_structure: 85.0, expression_charisma: 90.0, lighting_color: 87.0,
+                background_framing: 83.0, photogenic_impact: 92.0,
+            },
             sections: BattleSections {
-                overall_take: "Nova wins on color and presence.".into(),
-                strengths: SideTexts { left: "Cleaner symmetry.".into(), right: "Much stronger color and aura.".into() },
+                overall_take: "Nova wins on expression and overall impact.".into(),
+                strengths: SideTexts { left: "Cleaner symmetry.".into(), right: "Much stronger expression and aura.".into() },
                 weaknesses: SideTexts { left: "Feels flat.".into(), right: "Slightly less balanced.".into() },
-                why_this_won: "Nova built separation in color vitality and style aura.".into(),
+                why_this_won: "Nova built separation in expression and photogenic impact.".into(),
                 model_jury_notes: "Stubbed VLM path.".into(),
             },
             provider: "openai".into(),
@@ -1873,13 +3005,21 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
     // ── Ability stats ──────────────────────────────────────────────
     lines.push(paint("\u{25C6} ABILITY STATS \u{25C6}", ANSI_ORANGE, color));
     lines.push(String::new());
+    let term_lang = match result.language.as_deref() {
+        Some("ko") => Language::Korean,
+        Some("ja") => Language::Japanese,
+        _ => Language::English,
+    };
     for card in &result.axis_cards {
         let (gap, gap_color) = signed_gap(card, &result.winner.id);
         let gap_text = paint(&gap, gap_color, color);
+        let short = localized_axis_short(term_lang, &card.key);
+        let icon = axis_icon(&card.key);
+        let label_display = format!("{} {}  ({})", icon, short, card.label);
 
         lines.push(format!(
             "  {}  {}",
-            paint(&format!("{:<20}", card.label), ANSI_AMBER, color),
+            paint(&format!("{:<28}", label_display), ANSI_AMBER, color),
             gap_text
         ));
 
