@@ -102,6 +102,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Korean, "start_battle") => "배틀 시작",
         (Language::Korean, "open_report") => "최근 리포트 열기",
         (Language::Korean, "share_result") => "SNS 공유",
+        (Language::Korean, "publish_web") => "웹에 공유 (URL + QR)",
+        (Language::Korean, "serve_lan") => "폰에서 보기 (LAN 서버)",
         (Language::Korean, "settings") => "설정",
         (Language::Korean, "quit") => "종료",
         (Language::Korean, "star_github") => "GitHub 스타 주기",
@@ -183,6 +185,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Japanese, "start_battle") => "バトル開始",
         (Language::Japanese, "open_report") => "最新レポートを開く",
         (Language::Japanese, "share_result") => "SNSシェア",
+        (Language::Japanese, "publish_web") => "ウェブに公開（URL + QR）",
+        (Language::Japanese, "serve_lan") => "スマホで見る（LAN サーバー）",
         (Language::Japanese, "settings") => "設定",
         (Language::Japanese, "quit") => "終了",
         (Language::Japanese, "star_github") => "GitHubスター",
@@ -265,6 +269,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (_, "start_battle") => "Start Battle",
         (_, "open_report") => "Open Latest Report",
         (_, "share_result") => "Share to SNS",
+        (_, "publish_web") => "Publish to Web (URL + QR)",
+        (_, "serve_lan") => "View on Phone (LAN server)",
         (_, "settings") => "Settings",
         (_, "quit") => "Quit",
         (_, "star_github") => "Star BetterThanYou on GitHub",
@@ -2629,58 +2635,147 @@ fn platform_dimensions(platform: &str) -> (u32, u32) {
     }
 }
 
+/// Decode embedded base64 image into a fitted RgbaImage that preserves aspect ratio.
+fn decode_portrait_for_share(data_url: &str, max_w: u32, max_h: u32) -> RgbaImage {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_url.split(',').nth(1).unwrap_or(""))
+        .unwrap_or_default();
+    let img = image::load_from_memory(&bytes).unwrap_or_else(|_| DynamicImage::new_rgba8(64, 64));
+    img.resize(max_w, max_h, imageops::FilterType::Triangle).to_rgba8()
+}
+
+fn rank_color_rgba(score: f32) -> Rgba<u8> {
+    if score >= 95.0 { Rgba([255, 179, 255, 255]) }
+    else if score >= 90.0 { Rgba([255, 211, 107, 255]) }
+    else if score >= 80.0 { Rgba([80, 255, 120, 255]) }
+    else if score >= 70.0 { Rgba([99, 235, 211, 255]) }
+    else if score >= 60.0 { Rgba([255, 143, 66, 255]) }
+    else if score >= 50.0 { Rgba([255, 128, 128, 255]) }
+    else { Rgba([150, 150, 150, 255]) }
+}
+
+fn rank_letter(score: f32) -> &'static str {
+    if score >= 95.0 { "S+" }
+    else if score >= 90.0 { "S" }
+    else if score >= 80.0 { "A" }
+    else if score >= 70.0 { "B" }
+    else if score >= 60.0 { "C" }
+    else if score >= 50.0 { "D" }
+    else { "F" }
+}
+
 fn render_share_image(result: &BattleResult, platform: &str) -> RgbaImage {
     let (width, height) = platform_dimensions(platform);
+
+    // ── Background gradient ──────────────────────────────────────────
     let mut canvas = RgbaImage::from_pixel(width, height, Rgba([10, 13, 20, 255]));
-    draw_block(&mut canvas, 0, 0, width, height / 3, Rgba([24, 28, 44, 255]));
-    draw_block(&mut canvas, 0, height / 3, width, height / 3, Rgba([14, 18, 28, 255]));
-    draw_block(&mut canvas, 0, (height / 3) * 2, width, height / 3 + 4, Rgba([18, 22, 34, 255]));
-    draw_block(&mut canvas, 0, 0, width, 20, Rgba([255, 140, 66, 255]));
-
-    let left_image = image::load_from_memory(&base64::engine::general_purpose::STANDARD.decode(result.inputs.left.image_data_url.split(',').nth(1).unwrap_or("")).unwrap_or_default())
-        .unwrap_or_else(|_| DynamicImage::new_rgba8(64, 64))
-        .resize(width / 2 - 48, height / 2, imageops::FilterType::Triangle)
-        .to_rgba8();
-    let right_image = image::load_from_memory(&base64::engine::general_purpose::STANDARD.decode(result.inputs.right.image_data_url.split(',').nth(1).unwrap_or("")).unwrap_or_default())
-        .unwrap_or_else(|_| DynamicImage::new_rgba8(64, 64))
-        .resize(width / 2 - 48, height / 2, imageops::FilterType::Triangle)
-        .to_rgba8();
-
-    imageops::overlay(&mut canvas, &left_image, 24, 100);
-    imageops::overlay(&mut canvas, &right_image, (width / 2 + 24) as i64, 100);
-
-    draw_text_8x8(&mut canvas, 28, 32, "BETTERTHANYOU", Rgba([245, 239, 228, 255]), 3);
-    draw_text_8x8(&mut canvas, 28, 62, &format!("WINNER // {}", result.winner.label.to_uppercase()), Rgba([255, 207, 90, 255]), 2);
-    draw_text_8x8(&mut canvas, 28, height - 180, &format!("LEFT  {:.1}", result.scores.left.total), Rgba([120, 240, 212, 255]), 2);
-    draw_text_8x8(&mut canvas, width / 2 + 24, height - 180, &format!("RIGHT {:.1}", result.scores.right.total), Rgba([141, 183, 255, 255]), 2);
-    draw_text_8x8(&mut canvas, 28, height - 140, &format!("JUDGE {}", result.engine.judge_mode.to_uppercase()), Rgba([210, 197, 178, 255]), 2);
-    draw_text_8x8(&mut canvas, 28, height - 100, &format!("MARGIN {:.1}", result.winner.margin), Rgba([245, 239, 228, 255]), 2);
-
-    // Draw axis stat bars for taller platforms (story/tiktok/pinterest)
-    if height >= 1350 {
-        let bar_y_start = (height as i64 / 2 + 80).min(height as i64 - 400) as u32;
-        let bar_width = width - 80;
-        let bar_height = 16u32;
-        let row_spacing = 42u32;
-
-        for (i, card) in result.axis_cards.iter().enumerate() {
-            let y = bar_y_start + (i as u32) * row_spacing;
-            // Label
-            draw_text_8x8(&mut canvas, 40, y, &card.label.to_uppercase(), Rgba([255, 214, 107, 255]), 1);
-            // Left bar
-            let left_w = ((card.left / 100.0) * (bar_width / 2 - 60) as f32) as u32;
-            draw_block(&mut canvas, 40, y + 14, left_w, bar_height, Rgba([255, 143, 66, 200]));
-            draw_text_8x8(&mut canvas, 40 + left_w + 6, y + 14, &format!("{:.0}", card.left), Rgba([220, 220, 240, 255]), 1);
-            // Right bar
-            let right_w = ((card.right / 100.0) * (bar_width / 2 - 60) as f32) as u32;
-            draw_block(&mut canvas, width / 2 + 10, y + 14, right_w, bar_height, Rgba([100, 180, 255, 200]));
-            draw_text_8x8(&mut canvas, width / 2 + 10 + right_w + 6, y + 14, &format!("{:.0}", card.right), Rgba([220, 220, 240, 255]), 1);
-            // Winner indicator
-            let leader_color = if card.leader == "left" { Rgba([80, 255, 120, 255]) } else if card.leader == "right" { Rgba([80, 255, 120, 255]) } else { Rgba([0, 255, 220, 255]) };
-            let leader_text = if card.leader == "tie" { "TIE" } else if card.leader == result.winner.id { "WIN" } else { "" };
-            draw_text_8x8(&mut canvas, width - 80, y + 14, leader_text, leader_color, 1);
+    for y in 0..height {
+        let t = y as f32 / height as f32;
+        let r = (10.0 + 14.0 * (1.0 - t)) as u8;
+        let g = (13.0 + 12.0 * (1.0 - t)) as u8;
+        let b = (20.0 + 24.0 * (1.0 - t)) as u8;
+        for x in 0..width {
+            canvas.put_pixel(x, y, Rgba([r, g, b, 255]));
         }
     }
+
+    // Top accent bar
+    draw_block(&mut canvas, 0, 0, width, 14, Rgba([255, 140, 66, 255]));
+    // Bottom accent bar
+    draw_block(&mut canvas, 0, height.saturating_sub(8), width, 8, Rgba([99, 235, 211, 255]));
+
+    // ── Header ───────────────────────────────────────────────────────
+    let header_y = 36u32;
+    draw_text_8x8(&mut canvas, 28, header_y, "BETTERTHANYOU", Rgba([255, 255, 255, 255]), 3);
+    draw_text_8x8(&mut canvas, 28, header_y + 36, "PORTRAIT BATTLE", Rgba([200, 200, 220, 255]), 1);
+
+    // Winner badge
+    let winner_text = format!("WINNER: {}", result.winner.label.to_uppercase());
+    draw_text_8x8(&mut canvas, 28, header_y + 60, &winner_text, Rgba([255, 207, 90, 255]), 2);
+    let rank = rank_letter(result.winner.total_score);
+    let rank_col = rank_color_rgba(result.winner.total_score);
+    draw_text_8x8(&mut canvas, 28, header_y + 88, &format!("RANK {}", rank), rank_col, 2);
+
+    // ── Photos: side-by-side, fitted to preserve aspect ratio ───────
+    let photo_area_y: u32 = header_y + 130;
+    let photo_max_w = (width / 2).saturating_sub(40);
+    let photo_max_h = if height >= 1500 { 600 } else { (height as f32 * 0.35) as u32 };
+
+    let left_img = decode_portrait_for_share(&result.inputs.left.image_data_url, photo_max_w, photo_max_h);
+    let right_img = decode_portrait_for_share(&result.inputs.right.image_data_url, photo_max_w, photo_max_h);
+
+    let left_x = ((width / 4) as i32 - (left_img.width() / 2) as i32).max(20) as i64;
+    let right_x = ((width as i32 * 3 / 4) - (right_img.width() / 2) as i32).max((width / 2 + 20) as i32) as i64;
+
+    // Draw black frames behind photos
+    draw_block(&mut canvas, left_x as u32, photo_area_y, left_img.width() + 8, left_img.height() + 8, Rgba([0, 0, 0, 255]));
+    draw_block(&mut canvas, right_x as u32, photo_area_y, right_img.width() + 8, right_img.height() + 8, Rgba([0, 0, 0, 255]));
+
+    imageops::overlay(&mut canvas, &left_img, left_x + 4, photo_area_y as i64 + 4);
+    imageops::overlay(&mut canvas, &right_img, right_x + 4, photo_area_y as i64 + 4);
+
+    // Winner glow border (gold rectangle)
+    let winner_x = if result.winner.id == "left" { left_x } else { right_x };
+    let winner_w = if result.winner.id == "left" { left_img.width() + 8 } else { right_img.width() + 8 };
+    let winner_h = if result.winner.id == "left" { left_img.height() + 8 } else { right_img.height() + 8 };
+    let gold = Rgba([255, 211, 107, 255]);
+    let bw = 4u32;
+    draw_block(&mut canvas, winner_x as u32, photo_area_y, winner_w, bw, gold); // top
+    draw_block(&mut canvas, winner_x as u32, photo_area_y + winner_h - bw, winner_w, bw, gold); // bottom
+    draw_block(&mut canvas, winner_x as u32, photo_area_y, bw, winner_h, gold); // left
+    draw_block(&mut canvas, winner_x as u32 + winner_w - bw, photo_area_y, bw, winner_h, gold); // right
+
+    // Photo labels (filename) below each photo
+    let label_y = photo_area_y + photo_max_h + 16;
+    draw_text_8x8(&mut canvas, left_x as u32, label_y, &result.inputs.left.label.to_uppercase(), Rgba([255, 143, 66, 255]), 2);
+    draw_text_8x8(&mut canvas, left_x as u32, label_y + 24, &format!("{:.1}  {}", result.scores.left.total, rank_letter(result.scores.left.total)), Rgba([255, 255, 255, 255]), 3);
+    draw_text_8x8(&mut canvas, right_x as u32, label_y, &result.inputs.right.label.to_uppercase(), Rgba([100, 180, 255, 255]), 2);
+    draw_text_8x8(&mut canvas, right_x as u32, label_y + 24, &format!("{:.1}  {}", result.scores.right.total, rank_letter(result.scores.right.total)), Rgba([255, 255, 255, 255]), 3);
+
+    // ── Axis bars (only for tall formats) ────────────────────────────
+    let bar_y_start = label_y + 80;
+    let space_for_bars = height.saturating_sub(bar_y_start + 80);
+    let row_spacing = if space_for_bars >= 480 { 44u32 } else { 36u32 };
+    let needed = result.axis_cards.len() as u32 * row_spacing;
+
+    if space_for_bars >= needed.min(300) {
+        for (i, card) in result.axis_cards.iter().enumerate() {
+            let y = bar_y_start + (i as u32) * row_spacing;
+            if y + row_spacing > height - 60 { break; }
+
+            // Axis label
+            let short = localized_axis_short(Language::English, &card.key);
+            draw_text_8x8(&mut canvas, 32, y, &short.to_uppercase(), Rgba([255, 214, 107, 255]), 2);
+
+            // Bar geometry
+            let bar_left_x: u32 = 140;
+            let bar_right_x: u32 = width / 2 + 30;
+            let bar_max_w: u32 = (width / 2).saturating_sub(180);
+            let bar_h: u32 = 18;
+            let by = y + 6;
+
+            // Background tracks
+            draw_block(&mut canvas, bar_left_x, by, bar_max_w, bar_h, Rgba([35, 40, 55, 255]));
+            draw_block(&mut canvas, bar_right_x, by, bar_max_w, bar_h, Rgba([35, 40, 55, 255]));
+
+            // Filled bars
+            let lw = ((card.left / 100.0).clamp(0.0, 1.0) * bar_max_w as f32) as u32;
+            let rw_w = ((card.right / 100.0).clamp(0.0, 1.0) * bar_max_w as f32) as u32;
+            let l_color = if card.leader == "left" { Rgba([80, 255, 120, 255]) } else { Rgba([255, 143, 66, 255]) };
+            let r_color = if card.leader == "right" { Rgba([80, 255, 120, 255]) } else { Rgba([100, 180, 255, 255]) };
+            draw_block(&mut canvas, bar_left_x, by, lw, bar_h, l_color);
+            draw_block(&mut canvas, bar_right_x, by, rw_w, bar_h, r_color);
+
+            // Numbers at end of each bar
+            draw_text_8x8(&mut canvas, bar_left_x + bar_max_w + 4, by + 2, &format!("{:.0}", card.left), Rgba([220, 220, 240, 255]), 1);
+            draw_text_8x8(&mut canvas, bar_right_x + bar_max_w + 4, by + 2, &format!("{:.0}", card.right), Rgba([220, 220, 240, 255]), 1);
+        }
+    }
+
+    // ── Footer with margin and judge ─────────────────────────────────
+    let footer_y = height.saturating_sub(60);
+    draw_text_8x8(&mut canvas, 28, footer_y, &format!("MARGIN +{:.1}  JUDGE {}", result.winner.margin, result.engine.judge_mode.to_uppercase()), Rgba([180, 180, 200, 255]), 1);
+    draw_text_8x8(&mut canvas, 28, footer_y + 18, "github.com/NomaDamas/BetterThanYou", Rgba([99, 235, 211, 255]), 1);
 
     canvas
 }
@@ -2714,6 +2809,311 @@ pub fn generate_share_bundle(result: &BattleResult, output_dir: &Path) -> Result
     };
     fs::write(&bundle.manifest_path, serde_json::to_string_pretty(&bundle)?)?;
     Ok(bundle)
+}
+
+// ── Publish: upload report to free hosting and return public URL ──────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedReport {
+    pub url: String,
+    pub provider: String,
+    pub qr_ascii: String,
+}
+
+/// Render a QR code as ASCII art (printable in terminal).
+pub fn qr_ascii(text: &str) -> String {
+    use qrcode::render::unicode;
+    use qrcode::QrCode;
+    let code = match QrCode::new(text.as_bytes()) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+    code.render::<unicode::Dense1x2>()
+        .dark_color(unicode::Dense1x2::Light)
+        .light_color(unicode::Dense1x2::Dark)
+        .build()
+}
+
+/// Try uploading to litterbox.catbox.moe (temporary, 1h/12h/24h/72h, free, no auth).
+/// Returns a direct URL that phone browsers can render as HTML.
+async fn try_litterbox(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+    let form = reqwest::multipart::Form::new()
+        .text("reqtype", "fileupload")
+        .text("time", "72h")
+        .part(
+            "fileToUpload",
+            reqwest::multipart::Part::bytes(bytes.to_vec())
+                .file_name(filename.to_string())
+                .mime_str("text/html")
+                .map_err(|e| anyhow!("invalid mime: {e}"))?,
+        );
+
+    let response = client
+        .post("https://litterbox.catbox.moe/resources/internals/api.php")
+        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .multipart(form)
+        .send()
+        .await
+        .with_context(|| "litterbox: network error")?;
+
+    if !response.status().is_success() {
+        bail!("litterbox HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let text = response.text().await?.trim().to_string();
+    if !text.starts_with("http") {
+        bail!("litterbox: unexpected response: {text}");
+    }
+    Ok(text)
+}
+
+/// Try uploading to catbox.moe (permanent, free, no auth).
+async fn try_catbox(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+    let form = reqwest::multipart::Form::new()
+        .text("reqtype", "fileupload")
+        .part(
+            "fileToUpload",
+            reqwest::multipart::Part::bytes(bytes.to_vec())
+                .file_name(filename.to_string())
+                .mime_str("text/html")
+                .map_err(|e| anyhow!("invalid mime: {e}"))?,
+        );
+
+    let response = client
+        .post("https://catbox.moe/user/api.php")
+        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .multipart(form)
+        .send()
+        .await
+        .with_context(|| "catbox.moe: network error")?;
+
+    if !response.status().is_success() {
+        bail!("catbox.moe HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let text = response.text().await?.trim().to_string();
+    if !text.starts_with("http") {
+        bail!("catbox.moe: {text}");
+    }
+    Ok(text)
+}
+
+/// Try uploading to tmpfiles.org (returns JSON with `data.url`).
+async fn try_tmpfiles_org(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+    let part = reqwest::multipart::Part::bytes(bytes.to_vec())
+        .file_name(filename.to_string())
+        .mime_str("text/html")
+        .map_err(|e| anyhow!("invalid mime: {e}"))?;
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let response = client
+        .post("https://tmpfiles.org/api/v1/upload")
+        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .multipart(form)
+        .send()
+        .await
+        .with_context(|| "tmpfiles.org: network error")?;
+
+    if !response.status().is_success() {
+        bail!("tmpfiles.org HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let payload: Value = response.json().await.with_context(|| "tmpfiles.org: invalid JSON")?;
+    let raw_url = payload
+        .get("data")
+        .and_then(|d| d.get("url"))
+        .and_then(|u| u.as_str())
+        .ok_or_else(|| anyhow!("tmpfiles.org: missing data.url"))?;
+    let direct = raw_url.replacen("tmpfiles.org/", "tmpfiles.org/dl/", 1);
+    Ok(direct)
+}
+
+/// Try uploading to file.io (returns JSON with `link`, one-time download).
+async fn try_file_io(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+    let part = reqwest::multipart::Part::bytes(bytes.to_vec())
+        .file_name(filename.to_string())
+        .mime_str("text/html")
+        .map_err(|e| anyhow!("invalid mime: {e}"))?;
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let response = client
+        .post("https://file.io/?expires=1w")
+        .header("User-Agent", "BetterThanYou/0.3")
+        .multipart(form)
+        .send()
+        .await
+        .with_context(|| "file.io: network error")?;
+
+    if !response.status().is_success() {
+        bail!("file.io HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let payload: Value = response.json().await.with_context(|| "file.io: invalid JSON")?;
+    let link = payload
+        .get("link")
+        .and_then(|u| u.as_str())
+        .ok_or_else(|| anyhow!("file.io: missing link"))?;
+    Ok(link.to_string())
+}
+
+/// Try uploading to 0x0.st (plain text URL response).
+async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+    let part = reqwest::multipart::Part::bytes(bytes.to_vec())
+        .file_name(filename.to_string())
+        .mime_str("text/html")
+        .map_err(|e| anyhow!("invalid mime: {e}"))?;
+    let form = reqwest::multipart::Form::new().part("file", part);
+
+    let response = client
+        .post("https://0x0.st")
+        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .multipart(form)
+        .send()
+        .await
+        .with_context(|| "0x0.st: network error")?;
+
+    if !response.status().is_success() {
+        bail!("0x0.st HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let url = response.text().await?.trim().to_string();
+    if !url.starts_with("http") {
+        bail!("0x0.st: unexpected response: {url}");
+    }
+    Ok(url)
+}
+
+/// Upload an HTML file to a free temporary file host and return the public URL.
+/// Tries multiple hosts in order and returns the first that succeeds.
+pub async fn publish_html_to_web(html_path: &Path) -> Result<PublishedReport> {
+    let bytes = fs::read(html_path).with_context(|| format!("failed to read {}", html_path.display()))?;
+    let filename = html_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("battle.html")
+        .to_string();
+
+    let client = Client::new();
+    let mut last_err: Option<String> = None;
+
+    // Order: catbox (permanent) → litterbox (72h, very reliable) → tmpfiles → file.io → 0x0.st
+    for (name, result) in [
+        ("catbox.moe", try_catbox(&client, &bytes, &filename).await),
+        ("litterbox.catbox.moe (72h)", try_litterbox(&client, &bytes, &filename).await),
+        ("tmpfiles.org", try_tmpfiles_org(&client, &bytes, &filename).await),
+        ("file.io", try_file_io(&client, &bytes, &filename).await),
+        ("0x0.st", try_0x0_st(&client, &bytes, &filename).await),
+    ] {
+        match result {
+            Ok(url) => {
+                return Ok(PublishedReport {
+                    url: url.clone(),
+                    provider: name.to_string(),
+                    qr_ascii: qr_ascii(&url),
+                });
+            }
+            Err(e) => {
+                last_err = Some(format!("{}: {}", name, e));
+            }
+        }
+    }
+
+    bail!(
+        "All upload providers failed. Last error: {}",
+        last_err.unwrap_or_else(|| "unknown".into())
+    )
+}
+
+// ── Serve: local HTTP server for phone/LAN viewing ─────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServeInfo {
+    pub local_url: String,
+    pub lan_url: Option<String>,
+    pub qr_ascii: String,
+    pub port: u16,
+}
+
+/// Start a blocking local HTTP server that serves the given directory.
+/// Returns when the server is stopped (Ctrl-C). Prints the URL + QR before blocking.
+pub fn serve_reports_blocking(reports_dir: &Path, port: u16) -> Result<ServeInfo> {
+    use tiny_http::{Header, Response, Server, StatusCode};
+    use std::path::PathBuf;
+
+    let bind = format!("0.0.0.0:{}", port);
+    let server = Server::http(&bind).map_err(|e| anyhow!("failed to bind {bind}: {e}"))?;
+
+    let lan_ip = local_ip_address::local_ip().ok().map(|ip| ip.to_string());
+    let local_url = format!("http://localhost:{}/latest-battle.html", port);
+    let lan_url = lan_ip.as_ref().map(|ip| format!("http://{}:{}/latest-battle.html", ip, port));
+    let info = ServeInfo {
+        local_url: local_url.clone(),
+        lan_url: lan_url.clone(),
+        qr_ascii: qr_ascii(lan_url.as_deref().unwrap_or(&local_url)),
+        port,
+    };
+
+    println!();
+    println!("\u{1F310} BetterThanYou local server running");
+    println!("  \u{2022} Local : {}", local_url);
+    if let Some(url) = &lan_url {
+        println!("  \u{2022} LAN   : {} (open this on your phone)", url);
+    }
+    println!();
+    println!("Scan with your phone camera:");
+    println!("{}", info.qr_ascii);
+    println!("Press Ctrl-C to stop the server.");
+    println!();
+
+    let reports_dir = reports_dir.to_path_buf();
+    for request in server.incoming_requests() {
+        let url_path = request.url().split('?').next().unwrap_or("/").to_string();
+        let rel = url_path.trim_start_matches('/');
+        let target: PathBuf = if rel.is_empty() || rel == "/" {
+            reports_dir.join("latest-battle.html")
+        } else {
+            reports_dir.join(rel)
+        };
+
+        // Prevent path traversal: target must be inside reports_dir.
+        let canonical_target = target.canonicalize().ok();
+        let canonical_root = reports_dir.canonicalize().ok();
+        let safe = match (&canonical_target, &canonical_root) {
+            (Some(t), Some(r)) => t.starts_with(r),
+            _ => false,
+        };
+
+        if !safe {
+            let _ = request.respond(Response::new_empty(StatusCode(403)));
+            continue;
+        }
+
+        match fs::read(&target) {
+            Ok(bytes) => {
+                let mime = if target.extension().and_then(|e| e.to_str()) == Some("html") {
+                    "text/html; charset=utf-8"
+                } else if target.extension().and_then(|e| e.to_str()) == Some("json") {
+                    "application/json"
+                } else if target.extension().and_then(|e| e.to_str()) == Some("png") {
+                    "image/png"
+                } else if target.extension().and_then(|e| e.to_str()) == Some("jpg")
+                    || target.extension().and_then(|e| e.to_str()) == Some("jpeg")
+                {
+                    "image/jpeg"
+                } else {
+                    "application/octet-stream"
+                };
+                let header = Header::from_bytes(&b"Content-Type"[..], mime.as_bytes()).unwrap();
+                let response = Response::from_data(bytes).with_header(header);
+                let _ = request.respond(response);
+            }
+            Err(_) => {
+                let _ = request.respond(Response::new_empty(StatusCode(404)));
+            }
+        }
+    }
+
+    Ok(info)
 }
 
 #[cfg(test)]

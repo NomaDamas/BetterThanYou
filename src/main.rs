@@ -10,9 +10,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
-    read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
-    render_terminal_battle, save_battle_artifacts, write_clipboard_text, AnalyzeOptions, AXIS_DEFINITIONS,
-    BattleResult, JudgeMode, Language, t, OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS,
+    publish_html_to_web, read_clipboard_text, regenerate_battle_report, render_open_summary,
+    render_report_summary, render_terminal_battle, save_battle_artifacts, serve_reports_blocking,
+    write_clipboard_text, AnalyzeOptions, AXIS_DEFINITIONS, BattleResult, JudgeMode, Language, t,
+    OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -88,6 +89,31 @@ enum Commands {
     Battle(BattleArgs),
     Report(ReportArgs),
     Open(OpenArgs),
+    /// Upload the latest (or given) HTML report to a free web host and return a shareable URL.
+    Publish(PublishArgs),
+    /// Serve the reports directory over HTTP on your LAN for phone viewing.
+    Serve(ServeArgs),
+}
+
+#[derive(Parser, Debug)]
+struct PublishArgs {
+    /// Path to the HTML report. Defaults to <out-dir>/latest-battle.html
+    target: Option<PathBuf>,
+    #[arg(long)]
+    out_dir: Option<PathBuf>,
+    /// Also copy the returned URL to the clipboard.
+    #[arg(long)]
+    copy: bool,
+}
+
+#[derive(Parser, Debug)]
+struct ServeArgs {
+    /// Directory to serve. Defaults to the configured reports directory.
+    #[arg(long)]
+    out_dir: Option<PathBuf>,
+    /// Port to bind. Defaults to 8080.
+    #[arg(long, default_value_t = 8080)]
+    port: u16,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -462,6 +488,38 @@ fn run_open(args: OpenArgs) -> Result<()> {
     Ok(())
 }
 
+async fn run_publish(args: PublishArgs) -> Result<()> {
+    let output_dir = args.out_dir.unwrap_or_else(default_reports_dir);
+    let path = args.target.unwrap_or_else(|| output_dir.join("latest-battle.html"));
+    if !path.exists() {
+        bail!("Report not found: {}. Run a battle first.", path.display());
+    }
+    println!("\u{2601}  Uploading {} ...", path.display());
+    let published = publish_html_to_web(&path).await?;
+    println!();
+    println!("\u{2728} Published successfully!");
+    println!("  URL : {}", published.url);
+    println!("  Host: {}", published.provider);
+    println!();
+    println!("Scan with your phone camera:");
+    println!("{}", published.qr_ascii);
+    if args.copy {
+        let _ = better_than_you::write_clipboard_text(&published.url);
+        println!("(URL copied to clipboard)");
+    }
+    Ok(())
+}
+
+fn run_serve(args: ServeArgs) -> Result<()> {
+    let output_dir = args.out_dir.unwrap_or_else(default_reports_dir);
+    if !output_dir.exists() {
+        bail!("Reports directory does not exist: {}", output_dir.display());
+    }
+    // This blocks until Ctrl-C.
+    let _ = serve_reports_blocking(&output_dir, args.port)?;
+    Ok(())
+}
+
 fn run_settings_menu(state: &mut SessionState) -> Result<()> {
     loop {
         let subtitle = vec![
@@ -808,18 +866,23 @@ async fn run_interactive_app() -> Result<()> {
 
                 loop {
                     let lang = state.language;
-                    let mut next_items = vec![
-                        t(lang, "rematch").to_string(),
-                        t(lang, "new_portraits").to_string(),
-                        t(lang, "share_result").to_string(),
-                        t(lang, "open_report").to_string(),
-                        t(lang, "settings").to_string(),
+                    // Build items with explicit keys so we can match by action rather than numeric index.
+                    let mut item_keys: Vec<&'static str> = vec![
+                        "rematch",
+                        "new_portraits",
+                        "share_result",
+                        "publish_web",
+                        "serve_lan",
+                        "open_report",
+                        "settings",
                     ];
                     if !state.app_state.star_acknowledged {
-                        next_items.push(t(lang, "star_github").to_string());
+                        item_keys.push("star_github");
                     }
-                    next_items.push(t(lang, "back").to_string());
-                    next_items.push(t(lang, "quit").to_string());
+                    item_keys.push("back");
+                    item_keys.push("quit");
+
+                    let next_items: Vec<String> = item_keys.iter().map(|k| t(lang, k).to_string()).collect();
 
                     let next_subtitle = vec![
                         format!("Winner: {}", result.winner.label),
@@ -827,26 +890,69 @@ async fn run_interactive_app() -> Result<()> {
                         format!("HTML: {}", artifacts.html_path),
                     ];
 
-                    match select_menu("What next?", &next_subtitle, &next_items, 0)? {
-                        Some(0) => break,
-                        Some(1) => {
+                    let choice = match select_menu("What next?", &next_subtitle, &next_items, 0)? {
+                        Some(i) => i,
+                        None => return Ok(()),
+                    };
+                    let action = item_keys.get(choice).copied().unwrap_or("quit");
+
+                    match action {
+                        "rematch" => break,
+                        "new_portraits" => {
                             state.left = None;
                             state.right = None;
                             break;
                         }
-                        Some(2) => run_share_menu(&mut state)?,
-                        Some(3) => {
+                        "share_result" => run_share_menu(&mut state)?,
+                        "publish_web" => {
+                            let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
+                            println!("\u{2601}  Uploading {} ...", path.display());
+                            match publish_html_to_web(&path).await {
+                                Ok(published) => {
+                                    let _ = write_clipboard_text(&published.url);
+                                    let body = vec![
+                                        format!("URL: {}", published.url),
+                                        format!("Host: {}", published.provider),
+                                        String::new(),
+                                        "(URL copied to clipboard)".to_string(),
+                                        String::new(),
+                                        "Scan with your phone camera:".to_string(),
+                                    ];
+                                    // Print QR directly to stdout since TUI can't render it cleanly.
+                                    println!();
+                                    for line in &body { println!("{}", line); }
+                                    println!("{}", published.qr_ascii);
+                                    println!("Press Enter to continue...");
+                                    let mut buf = String::new();
+                                    let _ = io::stdin().read_line(&mut buf);
+                                }
+                                Err(e) => {
+                                    let _ = select_menu("Publish Failed", &[format!("{}", e)], &["Back".to_string()], 0);
+                                }
+                            }
+                        }
+                        "serve_lan" => {
+                            let out_dir = state.out_dir.clone();
+                            println!();
+                            println!("Starting local server on port 8080...");
+                            println!("Press Ctrl-C in this terminal to stop.");
+                            // Blocks until Ctrl-C
+                            if let Err(e) = serve_reports_blocking(&out_dir, 8080) {
+                                let _ = select_menu("Serve Failed", &[format!("{}", e)], &["Back".to_string()], 0);
+                            }
+                        }
+                        "open_report" => {
                             let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
                             open_path(&path)?;
                         }
-                        Some(4) => run_settings_menu(&mut state)?,
-                        Some(5) if !state.app_state.star_acknowledged => {
+                        "settings" => run_settings_menu(&mut state)?,
+                        "star_github" => {
                             let star_url = "https://github.com/NomaDamas/BetterThanYou";
                             let _ = Command::new("open").arg(star_url).status();
                             state.app_state.star_acknowledged = true;
                             save_app_state(&state.app_state)?;
                         }
-                        Some(index) if (!state.app_state.star_acknowledged && index == 6) || (state.app_state.star_acknowledged && index == 5) => break,
+                        "back" => break,
                         _ => return Ok(()),
                     }
                 }
@@ -875,6 +981,8 @@ async fn main() -> Result<()> {
         Some(Commands::Battle(args)) => run_battle(args).await,
         Some(Commands::Report(args)) => run_report(args).await,
         Some(Commands::Open(args)) => run_open(args),
+        Some(Commands::Publish(args)) => run_publish(args).await,
+        Some(Commands::Serve(args)) => run_serve(args),
         None => {
             let app_state = load_app_state();
             maybe_print_star_reminder(&app_state);
