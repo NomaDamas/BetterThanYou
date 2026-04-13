@@ -10,9 +10,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
-    publish_html_to_web, read_clipboard_text, regenerate_battle_report, render_open_summary,
-    render_report_summary, render_terminal_battle, save_battle_artifacts, serve_reports_blocking,
-    write_clipboard_text, AnalyzeOptions, AXIS_DEFINITIONS, BattleResult, JudgeMode, Language, t,
+    load_battle_result_for_html, publish_html_to_web, publish_share_bundle_to_web,
+    read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
+    render_terminal_battle, save_battle_artifacts, serve_reports_blocking, write_clipboard_text,
+    AnalyzeOptions, AXIS_DEFINITIONS, BattleResult, JudgeMode, Language, PublishedShareBundle, t,
     OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS,
 };
 use clap::{Parser, Subcommand, ValueEnum};
@@ -194,6 +195,8 @@ struct SessionState {
     last_html: Option<PathBuf>,
     last_result: Option<BattleResult>,
     last_pair: Option<(String, String)>,
+    last_published_share: Option<PublishedShareBundle>,
+    last_published_battle_id: Option<String>,
     language: Language,
 }
 
@@ -215,6 +218,8 @@ impl SessionState {
             last_html: None,
             last_result: None,
             last_pair: None,
+            last_published_share: None,
+            last_published_battle_id: None,
         }
     }
 }
@@ -495,17 +500,48 @@ async fn run_publish(args: PublishArgs) -> Result<()> {
         bail!("Report not found: {}. Run a battle first.", path.display());
     }
     println!("\u{2601}  Uploading {} ...", path.display());
-    let published = publish_html_to_web(&path).await?;
+    let rich_publish = load_battle_result_for_html(&path)
+        .ok()
+        .and_then(|result| Some((result, path.clone())));
+
     println!();
-    println!("\u{2728} Published successfully!");
-    println!("  URL : {}", published.url);
-    println!("  Host: {}", published.provider);
-    println!();
-    println!("Scan with your phone camera:");
-    println!("{}", published.qr_ascii);
-    if args.copy {
-        let _ = better_than_you::write_clipboard_text(&published.url);
-        println!("(URL copied to clipboard)");
+    if let Some((result, html_path)) = rich_publish {
+        let published = publish_share_bundle_to_web(&result, &html_path, &output_dir).await?;
+        println!("\u{2728} Published public share bundle!");
+        println!("  Share page : {}", published.share_page_url);
+        println!("  Report     : {}", published.report_url);
+        println!("  Preview    : {}", published.preview_image_url);
+        println!("  Hosts      : {}", published.provider);
+        println!();
+        println!("Scan with your phone camera:");
+        println!("{}", published.qr_ascii);
+        println!();
+        println!("SNS links:");
+        for link in &published.social_links {
+            match &link.share_url {
+                Some(url) => println!("  {}: {}", link.platform, url),
+                None => println!("  {}: {}", link.platform, link.note),
+            }
+        }
+        if args.copy {
+            let _ = better_than_you::write_clipboard_text(&format!(
+                "{}\n\n{}",
+                published.caption, published.share_page_url
+            ));
+            println!("(Caption + public share URL copied to clipboard)");
+        }
+    } else {
+        let published = publish_html_to_web(&path).await?;
+        println!("\u{2728} Published successfully!");
+        println!("  URL : {}", published.url);
+        println!("  Host: {}", published.provider);
+        println!();
+        println!("Scan with your phone camera:");
+        println!("{}", published.qr_ascii);
+        if args.copy {
+            let _ = better_than_you::write_clipboard_text(&published.url);
+            println!("(URL copied to clipboard)");
+        }
     }
     Ok(())
 }
@@ -518,6 +554,32 @@ fn run_serve(args: ServeArgs) -> Result<()> {
     // This blocks until Ctrl-C.
     let _ = serve_reports_blocking(&output_dir, args.port)?;
     Ok(())
+}
+
+fn open_external_url(url: &str) {
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let _ = Command::new(opener).arg(url).status();
+}
+
+async fn ensure_published_share_bundle(state: &mut SessionState) -> Result<PublishedShareBundle> {
+    let result = state
+        .last_result
+        .clone()
+        .ok_or_else(|| anyhow!("No latest result to publish."))?;
+    if state.last_published_battle_id.as_deref() == Some(result.battle_id.as_str()) {
+        if let Some(existing) = state.last_published_share.clone() {
+            return Ok(existing);
+        }
+    }
+
+    let html_path = state
+        .last_html
+        .clone()
+        .unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
+    let published = publish_share_bundle_to_web(&result, &html_path, &state.out_dir).await?;
+    state.last_published_battle_id = Some(result.battle_id.clone());
+    state.last_published_share = Some(published.clone());
+    Ok(published)
 }
 
 fn run_settings_menu(state: &mut SessionState) -> Result<()> {
@@ -700,7 +762,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
     }
 }
 
-fn run_share_menu(state: &mut SessionState) -> Result<()> {
+async fn run_share_menu(state: &mut SessionState) -> Result<()> {
     let Some(result) = state.last_result.as_ref() else {
         let _ = select_menu("Share", &["No latest result to share.".to_string()], &["Back".to_string()], 0)?;
         return Ok(());
@@ -709,7 +771,7 @@ fn run_share_menu(state: &mut SessionState) -> Result<()> {
     loop {
         let subtitle = vec![
             format!("Share folder: {}", bundle.directory),
-            "Choosing a platform copies the caption to clipboard first.".to_string(),
+            "Choosing a platform copies the caption first and tries to publish a public share page.".to_string(),
         ];
         let mut items = bundle.assets.iter().map(|asset| asset.platform.clone()).collect::<Vec<_>>();
         items.push("Open share folder".to_string());
@@ -718,11 +780,43 @@ fn run_share_menu(state: &mut SessionState) -> Result<()> {
         match select_menu("Share Latest Result", &subtitle, &items, 0)? {
             Some(index) if index < bundle.assets.len() => {
                 let asset = &bundle.assets[index];
-                let _ = write_clipboard_text(&asset.caption);
-                if let Some(url) = &asset.open_url {
-                    let _ = Command::new("open").arg(url).status();
+                let published = ensure_published_share_bundle(state).await.ok();
+
+                if let Some(published) = published {
+                    let clipboard = better_than_you::share_clipboard_text(
+                        &asset.platform,
+                        &asset.caption,
+                        &published.share_page_url,
+                        &published.preview_image_url,
+                        &published.report_url,
+                    );
+                    let _ = write_clipboard_text(&clipboard);
+
+                    if let Some(link) = published
+                        .social_links
+                        .iter()
+                        .find(|link| link.platform == asset.platform)
+                    {
+                        if let Some(url) = &link.share_url {
+                            open_external_url(url);
+                        } else if let Some(url) = &asset.open_url {
+                            open_external_url(url);
+                            open_path(PathBuf::from(&asset.image_path).as_path())?;
+                        } else {
+                            open_path(PathBuf::from(&asset.image_path).as_path())?;
+                        }
+                    } else if let Some(url) = &asset.open_url {
+                        open_external_url(url);
+                    } else {
+                        open_path(PathBuf::from(&asset.image_path).as_path())?;
+                    }
                 } else {
-                    open_path(PathBuf::from(&asset.image_path).as_path())?;
+                    let _ = write_clipboard_text(&asset.caption);
+                    if let Some(url) = &asset.open_url {
+                        open_external_url(url);
+                    } else {
+                        open_path(PathBuf::from(&asset.image_path).as_path())?;
+                    }
                 }
             }
             Some(index) if index == bundle.assets.len() => {
@@ -860,6 +954,8 @@ async fn run_interactive_app() -> Result<()> {
                 state.last_json = Some(PathBuf::from(&artifacts.json_path));
                 state.last_html = Some(PathBuf::from(&artifacts.html_path));
                 state.last_result = Some(result.clone());
+                state.last_published_share = None;
+                state.last_published_battle_id = None;
                 if let Err(_) = ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None) {
                     // TUI error - continue to menu anyway
                 }
@@ -901,18 +997,38 @@ async fn run_interactive_app() -> Result<()> {
                         "new_portraits" => {
                             state.left = None;
                             state.right = None;
+                            state.last_published_share = None;
+                            state.last_published_battle_id = None;
                             break;
                         }
-                        "share_result" => run_share_menu(&mut state)?,
+                        "share_result" => run_share_menu(&mut state).await?,
                         "publish_web" => {
                             let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
                             println!("\u{2601}  Uploading {} ...", path.display());
-                            match publish_html_to_web(&path).await {
+                            let publish_result = if let Some(result) = state.last_result.clone() {
+                                publish_share_bundle_to_web(&result, &path, &state.out_dir).await
+                                    .map(|bundle| {
+                                        (
+                                            bundle.share_page_url.clone(),
+                                            bundle.provider.clone(),
+                                            bundle.qr_ascii.clone(),
+                                            Some(bundle),
+                                        )
+                                    })
+                            } else {
+                                publish_html_to_web(&path).await
+                                    .map(|published| (published.url, published.provider, published.qr_ascii, None))
+                            };
+                            match publish_result {
                                 Ok(published) => {
-                                    let _ = write_clipboard_text(&published.url);
+                                    let _ = write_clipboard_text(&published.0);
+                                    if let Some(bundle) = published.3.clone() {
+                                        state.last_published_battle_id = state.last_result.as_ref().map(|result| result.battle_id.clone());
+                                        state.last_published_share = Some(bundle);
+                                    }
                                     let body = vec![
-                                        format!("URL: {}", published.url),
-                                        format!("Host: {}", published.provider),
+                                        format!("URL: {}", published.0),
+                                        format!("Host: {}", published.1),
                                         String::new(),
                                         "(URL copied to clipboard)".to_string(),
                                         String::new(),
@@ -921,7 +1037,7 @@ async fn run_interactive_app() -> Result<()> {
                                     // Print QR directly to stdout since TUI can't render it cleanly.
                                     println!();
                                     for line in &body { println!("{}", line); }
-                                    println!("{}", published.qr_ascii);
+                                    println!("{}", published.2);
                                     println!("Press Enter to continue...");
                                     let mut buf = String::new();
                                     let _ = io::stdin().read_line(&mut buf);
@@ -961,7 +1077,7 @@ async fn run_interactive_app() -> Result<()> {
                 let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
                 open_path(&path)?;
             }
-            Some(2) => run_share_menu(&mut state)?,
+            Some(2) => run_share_menu(&mut state).await?,
             Some(3) => run_settings_menu(&mut state)?,
             Some(4) if !state.app_state.star_acknowledged => {
                 let star_url = "https://github.com/NomaDamas/BetterThanYou";

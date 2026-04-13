@@ -8,3 +8,4 @@ target/
 gpt
 gptOB
 reports/*-share/
+.omx/

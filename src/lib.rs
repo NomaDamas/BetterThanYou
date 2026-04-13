@@ -102,8 +102,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Korean, "start_battle") => "배틀 시작",
         (Language::Korean, "open_report") => "최근 리포트 열기",
         (Language::Korean, "share_result") => "SNS 공유",
-        (Language::Korean, "publish_web") => "웹에 공유 (URL + QR)",
-        (Language::Korean, "serve_lan") => "폰에서 보기 (LAN 서버)",
+        (Language::Korean, "publish_web") => "공개 웹 공유 (폰 + SNS)",
+        (Language::Korean, "serve_lan") => "폰에서 보기 (같은 Wi-Fi/LAN)",
         (Language::Korean, "settings") => "설정",
         (Language::Korean, "quit") => "종료",
         (Language::Korean, "star_github") => "GitHub 스타 주기",
@@ -185,8 +185,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (Language::Japanese, "start_battle") => "バトル開始",
         (Language::Japanese, "open_report") => "最新レポートを開く",
         (Language::Japanese, "share_result") => "SNSシェア",
-        (Language::Japanese, "publish_web") => "ウェブに公開（URL + QR）",
-        (Language::Japanese, "serve_lan") => "スマホで見る（LAN サーバー）",
+        (Language::Japanese, "publish_web") => "公開ウェブ共有（スマホ + SNS）",
+        (Language::Japanese, "serve_lan") => "スマホで見る（同じ Wi-Fi / LAN）",
         (Language::Japanese, "settings") => "設定",
         (Language::Japanese, "quit") => "終了",
         (Language::Japanese, "star_github") => "GitHubスター",
@@ -269,8 +269,8 @@ pub fn t(lang: Language, key: &str) -> &'static str {
         (_, "start_battle") => "Start Battle",
         (_, "open_report") => "Open Latest Report",
         (_, "share_result") => "Share to SNS",
-        (_, "publish_web") => "Publish to Web (URL + QR)",
-        (_, "serve_lan") => "View on Phone (LAN server)",
+        (_, "publish_web") => "Public Web Share (Phone + SNS)",
+        (_, "serve_lan") => "View on Phone (same Wi-Fi / LAN)",
         (_, "settings") => "Settings",
         (_, "quit") => "Quit",
         (_, "star_github") => "Star BetterThanYou on GitHub",
@@ -2530,6 +2530,24 @@ pub struct ShareBundle {
     pub manifest_path: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SocialShareLink {
+    pub platform: String,
+    pub share_url: Option<String>,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedShareBundle {
+    pub share_page_url: String,
+    pub report_url: String,
+    pub preview_image_url: String,
+    pub provider: String,
+    pub qr_ascii: String,
+    pub caption: String,
+    pub social_links: Vec<SocialShareLink>,
+}
+
 fn draw_block(image: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: Rgba<u8>) {
     let max_x = (x + w).min(image.width());
     let max_y = (y + h).min(image.height());
@@ -2613,14 +2631,66 @@ fn share_url(platform: &str, caption: &str) -> Option<String> {
 
 fn share_note(platform: &str) -> &'static str {
     match platform {
-        "x" => "Opens a prefilled X compose link when available.",
-        "linkedin" => "Opens LinkedIn. Upload the generated card manually from the share folder.",
-        "instagram_post" => "Use the generated feed asset for Instagram post upload.",
-        "instagram_story" => "Use the generated 9:16 asset for Instagram Story upload.",
-        "tiktok" => "Use the generated 9:16 asset for TikTok upload or cover art.",
-        "pinterest" => "Use the generated vertical asset for Pinterest pin upload.",
+        "x" => "Publishes a public share page first, then opens a prefilled X composer when possible.",
+        "linkedin" => "Publishes a public share page first, then opens a LinkedIn share link.",
+        "instagram_post" => "Publishes a public image URL and copies the caption. Finish the upload in Instagram.",
+        "instagram_story" => "Publishes a public image URL and copies the caption. Finish the upload in Instagram Story.",
+        "tiktok" => "Publishes a public image URL and copies the caption. Finish the upload in TikTok.",
+        "pinterest" => "Publishes a public share page and image, then opens Pinterest pin creation when possible.",
         _ => "Generated social share asset.",
     }
+}
+
+pub fn share_clipboard_text(platform: &str, caption: &str, share_page_url: &str, preview_image_url: &str, report_url: &str) -> String {
+    match platform {
+        "x" | "linkedin" | "pinterest" => format!("{caption}\n\n{share_page_url}"),
+        "instagram_post" | "instagram_story" | "tiktok" => {
+            format!("{caption}\n\nPublic image: {preview_image_url}\nBattle report: {report_url}")
+        }
+        _ => format!("{caption}\n\n{share_page_url}"),
+    }
+}
+
+fn build_social_share_links(page_url: &str, preview_image_url: &str, caption: &str) -> Vec<SocialShareLink> {
+    let page = urlencoding::encode(page_url);
+    let media = urlencoding::encode(preview_image_url);
+    let description = urlencoding::encode(caption);
+    let text = urlencoding::encode(caption);
+
+    vec![
+        SocialShareLink {
+            platform: "x".to_string(),
+            share_url: Some(format!("https://twitter.com/intent/tweet?text={text}&url={page}")),
+            note: "Opens a prefilled X post with the public BetterThanYou share page.".to_string(),
+        },
+        SocialShareLink {
+            platform: "linkedin".to_string(),
+            share_url: Some(format!("https://www.linkedin.com/sharing/share-offsite/?url={page}")),
+            note: "Opens the LinkedIn offsite share flow for the public BetterThanYou page.".to_string(),
+        },
+        SocialShareLink {
+            platform: "instagram_post".to_string(),
+            share_url: None,
+            note: "Instagram web does not support fully automatic external posting. Use the published image URL and copied caption.".to_string(),
+        },
+        SocialShareLink {
+            platform: "instagram_story".to_string(),
+            share_url: None,
+            note: "Instagram Story web posting is not exposed as a public share intent. Use the published image URL and copied caption.".to_string(),
+        },
+        SocialShareLink {
+            platform: "tiktok".to_string(),
+            share_url: None,
+            note: "TikTok web upload cannot be prefilled from a public share intent. Use the published image URL and copied caption.".to_string(),
+        },
+        SocialShareLink {
+            platform: "pinterest".to_string(),
+            share_url: Some(format!(
+                "https://www.pinterest.com/pin/create/button/?url={page}&media={media}&description={description}"
+            )),
+            note: "Opens Pinterest pin creation with the public preview image and share page.".to_string(),
+        },
+    ]
 }
 
 fn platform_dimensions(platform: &str) -> (u32, u32) {
@@ -2811,6 +2881,198 @@ pub fn generate_share_bundle(result: &BattleResult, output_dir: &Path) -> Result
     Ok(bundle)
 }
 
+fn render_public_share_page(
+    result: &BattleResult,
+    caption: &str,
+    preview_image_url: &str,
+    report_url: &str,
+) -> String {
+    let title = format!(
+        "{} wins the BetterThanYou battle over {}",
+        result.winner.label, if result.winner.id == "left" { &result.inputs.right.label } else { &result.inputs.left.label }
+    );
+    let description = format!(
+        "{} Margin +{:.1}. {}",
+        caption.replace('\n', " "),
+        result.winner.margin,
+        result.sections.why_this_won
+    );
+
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content="{description}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="{title}" />
+    <meta property="og:description" content="{description}" />
+    <meta property="og:image" content="{preview_image_url}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{title}" />
+    <meta name="twitter:description" content="{description}" />
+    <meta name="twitter:image" content="{preview_image_url}" />
+    <style>
+      :root {{
+        color-scheme: dark;
+        --bg: #0b0f17;
+        --panel: #111827;
+        --text: #f4f7fb;
+        --muted: #a9b4c7;
+        --accent: #ff8f42;
+        --accent-2: #63ebd3;
+        --line: rgba(255,255,255,0.1);
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(255,143,66,0.22), transparent 28%),
+          radial-gradient(circle at top right, rgba(99,235,211,0.18), transparent 24%),
+          var(--bg);
+        color: var(--text);
+      }}
+      main {{
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }}
+      .eyebrow {{
+        color: var(--accent-2);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }}
+      h1 {{
+        margin: 12px 0 6px;
+        font-size: clamp(34px, 6vw, 60px);
+        line-height: 1;
+      }}
+      p {{
+        color: var(--muted);
+        line-height: 1.6;
+      }}
+      .hero {{
+        background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        padding: 28px;
+      }}
+      .image-wrap {{
+        margin-top: 22px;
+        overflow: hidden;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.02);
+      }}
+      img {{
+        display: block;
+        width: 100%;
+        height: auto;
+      }}
+      .stats {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }}
+      .card {{
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+      }}
+      .card strong {{
+        display: block;
+        font-size: 24px;
+        margin-top: 6px;
+        color: var(--text);
+      }}
+      .actions {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }}
+      .button {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 700;
+      }}
+      .button.primary {{
+        background: var(--accent);
+        color: #1a0c00;
+        border-color: transparent;
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="eyebrow">BetterThanYou public share</div>
+        <h1>{winner}</h1>
+        <p>{description}</p>
+        <div class="stats">
+          <div class="card">Winner<strong>{winner_score:.1}</strong></div>
+          <div class="card">Opponent<strong>{opponent_score:.1}</strong></div>
+          <div class="card">Margin<strong>+{margin:.1}</strong></div>
+        </div>
+        <div class="image-wrap">
+          <img src="{preview_image_url}" alt="{winner} public preview card" />
+        </div>
+        <div class="actions">
+          <a class="button primary" href="{report_url}">Open full battle report</a>
+          <a class="button" href="{preview_image_url}">Open public preview image</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>"#,
+        title = html_escape(&title),
+        description = html_escape(&description),
+        preview_image_url = html_escape(preview_image_url),
+        report_url = html_escape(report_url),
+        winner = html_escape(&result.winner.label),
+        winner_score = result.winner.total_score,
+        opponent_score = result.winner.opponent_score,
+        margin = result.winner.margin,
+    )
+}
+
+pub fn load_battle_result_for_html(html_path: &Path) -> Result<BattleResult> {
+    let mut candidates = Vec::new();
+    if let Some(stem) = html_path.file_stem().and_then(|value| value.to_str()) {
+        candidates.push(html_path.with_file_name(format!("{stem}.json")));
+    }
+    if let Some(parent) = html_path.parent() {
+        candidates.push(parent.join("latest-battle.json"));
+    }
+
+    for candidate in candidates {
+        if candidate.exists() {
+            let bytes = fs::read(&candidate)
+                .with_context(|| format!("failed to read {}", candidate.display()))?;
+            return serde_json::from_slice(&bytes)
+                .with_context(|| format!("failed to parse {}", candidate.display()));
+        }
+    }
+
+    bail!(
+        "No battle JSON found for {}. Expected a sibling .json file or latest-battle.json.",
+        html_path.display()
+    )
+}
+
 // ── Publish: upload report to free hosting and return public URL ──────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2818,6 +3080,12 @@ pub struct PublishedReport {
     pub url: String,
     pub provider: String,
     pub qr_ascii: String,
+}
+
+#[derive(Debug, Clone)]
+struct PublishedAsset {
+    url: String,
+    provider: String,
 }
 
 /// Render a QR code as ASCII art (printable in terminal).
@@ -2836,7 +3104,7 @@ pub fn qr_ascii(text: &str) -> String {
 
 /// Try uploading to litterbox.catbox.moe (temporary, 1h/12h/24h/72h, free, no auth).
 /// Returns a direct URL that phone browsers can render as HTML.
-async fn try_litterbox(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+async fn try_litterbox(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
     let form = reqwest::multipart::Form::new()
         .text("reqtype", "fileupload")
         .text("time", "72h")
@@ -2844,7 +3112,7 @@ async fn try_litterbox(client: &Client, bytes: &[u8], filename: &str) -> Result<
             "fileToUpload",
             reqwest::multipart::Part::bytes(bytes.to_vec())
                 .file_name(filename.to_string())
-                .mime_str("text/html")
+                .mime_str(mime)
                 .map_err(|e| anyhow!("invalid mime: {e}"))?,
         );
 
@@ -2868,14 +3136,14 @@ async fn try_litterbox(client: &Client, bytes: &[u8], filename: &str) -> Result<
 }
 
 /// Try uploading to catbox.moe (permanent, free, no auth).
-async fn try_catbox(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+async fn try_catbox(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
     let form = reqwest::multipart::Form::new()
         .text("reqtype", "fileupload")
         .part(
             "fileToUpload",
             reqwest::multipart::Part::bytes(bytes.to_vec())
                 .file_name(filename.to_string())
-                .mime_str("text/html")
+                .mime_str(mime)
                 .map_err(|e| anyhow!("invalid mime: {e}"))?,
         );
 
@@ -2899,10 +3167,10 @@ async fn try_catbox(client: &Client, bytes: &[u8], filename: &str) -> Result<Str
 }
 
 /// Try uploading to tmpfiles.org (returns JSON with `data.url`).
-async fn try_tmpfiles_org(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+async fn try_tmpfiles_org(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
     let part = reqwest::multipart::Part::bytes(bytes.to_vec())
         .file_name(filename.to_string())
-        .mime_str("text/html")
+        .mime_str(mime)
         .map_err(|e| anyhow!("invalid mime: {e}"))?;
     let form = reqwest::multipart::Form::new().part("file", part);
 
@@ -2929,10 +3197,10 @@ async fn try_tmpfiles_org(client: &Client, bytes: &[u8], filename: &str) -> Resu
 }
 
 /// Try uploading to file.io (returns JSON with `link`, one-time download).
-async fn try_file_io(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+async fn try_file_io(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
     let part = reqwest::multipart::Part::bytes(bytes.to_vec())
         .file_name(filename.to_string())
-        .mime_str("text/html")
+        .mime_str(mime)
         .map_err(|e| anyhow!("invalid mime: {e}"))?;
     let form = reqwest::multipart::Form::new().part("file", part);
 
@@ -2957,10 +3225,10 @@ async fn try_file_io(client: &Client, bytes: &[u8], filename: &str) -> Result<St
 }
 
 /// Try uploading to 0x0.st (plain text URL response).
-async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str) -> Result<String> {
+async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
     let part = reqwest::multipart::Part::bytes(bytes.to_vec())
         .file_name(filename.to_string())
-        .mime_str("text/html")
+        .mime_str(mime)
         .map_err(|e| anyhow!("invalid mime: {e}"))?;
     let form = reqwest::multipart::Form::new().part("file", part);
 
@@ -2983,35 +3251,20 @@ async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str) -> Result<Str
     Ok(url)
 }
 
-/// Upload an HTML file to a free temporary file host and return the public URL.
-/// Tries multiple hosts in order and returns the first that succeeds.
-pub async fn publish_html_to_web(html_path: &Path) -> Result<PublishedReport> {
-    let bytes = fs::read(html_path).with_context(|| format!("failed to read {}", html_path.display()))?;
-    let filename = html_path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("battle.html")
-        .to_string();
-
+async fn publish_bytes_to_web(bytes: &[u8], filename: &str, mime: &str) -> Result<PublishedAsset> {
     let client = Client::new();
     let mut last_err: Option<String> = None;
 
     // Order: catbox (permanent) → litterbox (72h, very reliable) → tmpfiles → file.io → 0x0.st
     for (name, result) in [
-        ("catbox.moe", try_catbox(&client, &bytes, &filename).await),
-        ("litterbox.catbox.moe (72h)", try_litterbox(&client, &bytes, &filename).await),
-        ("tmpfiles.org", try_tmpfiles_org(&client, &bytes, &filename).await),
-        ("file.io", try_file_io(&client, &bytes, &filename).await),
-        ("0x0.st", try_0x0_st(&client, &bytes, &filename).await),
+        ("catbox.moe", try_catbox(&client, bytes, filename, mime).await),
+        ("litterbox.catbox.moe (72h)", try_litterbox(&client, bytes, filename, mime).await),
+        ("tmpfiles.org", try_tmpfiles_org(&client, bytes, filename, mime).await),
+        ("file.io", try_file_io(&client, bytes, filename, mime).await),
+        ("0x0.st", try_0x0_st(&client, bytes, filename, mime).await),
     ] {
         match result {
-            Ok(url) => {
-                return Ok(PublishedReport {
-                    url: url.clone(),
-                    provider: name.to_string(),
-                    qr_ascii: qr_ascii(&url),
-                });
-            }
+            Ok(url) => return Ok(PublishedAsset { url, provider: name.to_string() }),
             Err(e) => {
                 last_err = Some(format!("{}: {}", name, e));
             }
@@ -3022,6 +3275,72 @@ pub async fn publish_html_to_web(html_path: &Path) -> Result<PublishedReport> {
         "All upload providers failed. Last error: {}",
         last_err.unwrap_or_else(|| "unknown".into())
     )
+}
+
+/// Upload an HTML file to a free temporary file host and return the public URL.
+/// Tries multiple hosts in order and returns the first that succeeds.
+pub async fn publish_html_to_web(html_path: &Path) -> Result<PublishedReport> {
+    let bytes = fs::read(html_path).with_context(|| format!("failed to read {}", html_path.display()))?;
+    let filename = html_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("battle.html")
+        .to_string();
+    let published = publish_bytes_to_web(&bytes, &filename, "text/html").await?;
+    Ok(PublishedReport {
+        qr_ascii: qr_ascii(&published.url),
+        url: published.url,
+        provider: published.provider,
+    })
+}
+
+pub async fn publish_share_bundle_to_web(
+    result: &BattleResult,
+    html_path: &Path,
+    output_dir: &Path,
+) -> Result<PublishedShareBundle> {
+    let share_bundle = generate_share_bundle(result, output_dir)?;
+    let preview_asset = share_bundle
+        .assets
+        .iter()
+        .find(|asset| asset.platform == "x")
+        .or_else(|| share_bundle.assets.first())
+        .ok_or_else(|| anyhow!("share bundle did not contain any assets"))?;
+    let preview_path = PathBuf::from(&preview_asset.image_path);
+
+    let preview_bytes = fs::read(&preview_path)
+        .with_context(|| format!("failed to read {}", preview_path.display()))?;
+    let preview_name = preview_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("share-preview.png")
+        .to_string();
+    let published_preview = publish_bytes_to_web(&preview_bytes, &preview_name, "image/png").await?;
+    let published_report = publish_html_to_web(html_path).await?;
+
+    let caption = share_caption(result, "x");
+    let share_page_html = render_public_share_page(
+        result,
+        &caption,
+        &published_preview.url,
+        &published_report.url,
+    );
+    let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
+    let published_page = publish_bytes_to_web(share_page_html.as_bytes(), &share_page_name, "text/html").await?;
+    let social_links = build_social_share_links(&published_page.url, &published_preview.url, &caption);
+
+    Ok(PublishedShareBundle {
+        share_page_url: published_page.url.clone(),
+        report_url: published_report.url,
+        preview_image_url: published_preview.url,
+        provider: format!(
+            "page: {} | report: {} | image: {}",
+            published_page.provider, published_report.provider, published_preview.provider
+        ),
+        qr_ascii: qr_ascii(&published_page.url),
+        caption,
+        social_links,
+    })
 }
 
 // ── Serve: local HTTP server for phone/LAN viewing ─────────────────────────
@@ -3212,6 +3531,58 @@ mod tests {
 
         assert_eq!(result.engine.judge_mode, "openai");
         assert_eq!(result.winner.id, "right");
+    }
+
+    #[tokio::test]
+    async fn public_share_page_contains_social_meta() {
+        let dir = tempdir().unwrap();
+        let left = dir.path().join("left.png");
+        let right = dir.path().join("right.png");
+        fixture_image(&left, [240, 180, 150, 255], [255, 240, 228, 255]);
+        fixture_image(&right, [32, 60, 112, 255], [122, 240, 212, 255]);
+
+        let result = analyze_portrait_battle(AnalyzeOptions {
+            left_source: left.display().to_string(),
+            right_source: right.display().to_string(),
+            left_label: Some("Aurora".into()),
+            right_label: Some("Nova".into()),
+            judge_mode: JudgeMode::Heuristic,
+            openai_model: DEFAULT_OPENAI_MODEL.into(),
+            openai_config: OpenAiConfig::default(),
+            axis_weights: Vec::new(),
+            language: Language::English,
+        }).await.unwrap();
+
+        let html = render_public_share_page(
+            &result,
+            "Caption line",
+            "https://cdn.example.com/preview.png",
+            "https://cdn.example.com/report.html",
+        );
+
+        assert!(html.contains("og:image"));
+        assert!(html.contains("twitter:card"));
+        assert!(html.contains("https://cdn.example.com/preview.png"));
+        assert!(html.contains("https://cdn.example.com/report.html"));
+    }
+
+    #[test]
+    fn supported_social_links_include_public_urls() {
+        let links = build_social_share_links(
+            "https://share.example.com/battle",
+            "https://share.example.com/preview.png",
+            "Winner caption",
+        );
+
+        let x = links.iter().find(|link| link.platform == "x").unwrap();
+        assert!(x.share_url.as_ref().unwrap().contains("twitter.com/intent/tweet"));
+        assert!(x.share_url.as_ref().unwrap().contains("share.example.com"));
+
+        let pinterest = links.iter().find(|link| link.platform == "pinterest").unwrap();
+        assert!(pinterest.share_url.as_ref().unwrap().contains("preview.png"));
+
+        let instagram = links.iter().find(|link| link.platform == "instagram_post").unwrap();
+        assert!(instagram.share_url.is_none());
     }
 }
 
