@@ -1,6 +1,6 @@
 [package]
 name = "better-than-you"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "CLI-first portrait battle tool for fictional AI-generated adult portraits"
 license = "MIT"
@@ -29,3 +29,11 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3.16"
+
+# Smaller, faster release binaries. ~16 MB → ~5 MB after `strip = true`.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+incremental = false

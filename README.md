@@ -24,13 +24,19 @@ cargo install --git https://github.com/NomaDamas/BetterThanYou
 brew install NomaDamas/better-than-you/better-than-you
 ```
 
+Tap repo: [`NomaDamas/homebrew-better-than-you`](https://github.com/NomaDamas/homebrew-better-than-you).
+
 ### From Source
 
 ```bash
 git clone https://github.com/NomaDamas/BetterThanYou
 cd BetterThanYou
-cargo install --path .
+make install        # = cargo install --path .  (no project-dir pollution)
 ```
+
+Both `cargo install` and `brew install` build in temp directories and leave no
+caches inside your local clone. Use `cargo build` only when you intend to
+iterate on the code (see the **Disk Hygiene** section below).
 
 ## Usage
 
@@ -118,10 +124,31 @@ Want your own deploy? See `infra/cloudflare/README.md`.
 ## Development
 
 ```bash
-cargo check
-cargo test
-cargo run -- --help
+make check          # cargo check
+make build          # cargo build --release
+make run            # cargo run --release
+make clean-cache    # reclaim disk (target/, node_modules/, old reports)
+make size           # show project disk usage
 ```
+
+## Disk Hygiene
+
+Rust projects accumulate build artifacts in `target/` (often 1+ GB). This
+project is wired to keep that as small as possible:
+
+- **End users** install via `brew install` or `cargo install --git` — both
+  build in **temp directories** outside your project, so nothing
+  accumulates in your filesystem after the install completes.
+- **Release binary** is shrunk via `Cargo.toml`'s `[profile.release]`
+  (`lto = "thin"`, `strip = "symbols"`, `codegen-units = 1`,
+  `incremental = false`). Final binary is ~5 MB instead of ~16 MB.
+- **Developers** running `cargo build` repeatedly should periodically run
+  `make clean-cache` (full reclaim) or `cargo clean` (Rust target only).
+- Optionally, share the Rust target directory across all your projects:
+  ```bash
+  export CARGO_TARGET_DIR="$HOME/.cache/cargo-target"
+  ```
+  Add it to your `~/.zshrc` to apply globally.
 
 ## License
 
