@@ -1026,6 +1026,7 @@ async fn run_interactive_app() -> Result<()> {
         items.push(t(lang, "quit").to_string());
 
         let mut subtitle = vec![
+            format!("BetterThanYou v{}", env!("CARGO_PKG_VERSION")),
             "Drop two portraits, get a winner-first battle card, then decide what to do next.".to_string(),
             format!("Judge: {}", state.judge.as_str()),
             format!("Model: {}", state.model),

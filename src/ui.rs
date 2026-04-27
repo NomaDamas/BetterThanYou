@@ -1415,6 +1415,10 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                 Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
             ));
             footer_spans.push(Span::styled(" Quit", Style::default().fg(DIM_TEXT)));
+            footer_spans.push(Span::styled(
+                format!("    v{}", env!("CARGO_PKG_VERSION")),
+                Style::default().fg(DIM_TEXT),
+            ));
 
             let prompt = Paragraph::new(Line::from(footer_spans))
                 .alignment(Alignment::Center)
