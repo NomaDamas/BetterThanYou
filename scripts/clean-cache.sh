@@ -26,13 +26,15 @@ if [ -d .omx ]; then
 fi
 
 if [ -d reports ]; then
-  echo "Trimming reports/ — keeping latest-battle.* and the 3 most recent timestamped pairs..."
-  cd reports
-  ls -t 2026-*.html 2025-*.html 2027-*.html 2>/dev/null | tail -n +4 | while read -r f; do
-    rm -f "$f" "${f%.html}.json"
-  done
-  ls -td */ 2>/dev/null | tail -n +4 | xargs -I{} rm -rf {} 2>/dev/null || true
-  cd "$ROOT"
+  echo "Trimming reports/ — keeping only latest-battle.* and latest-published.json..."
+  # Use bash with nullglob so missing patterns don't halt zsh.
+  bash -c '
+    shopt -s nullglob
+    cd reports
+    rm -rf -- 2024-*-share/ 2025-*-share/ 2026-*-share/ 2027-*-share/
+    rm -f -- 2024-*.html 2024-*.json 2025-*.html 2025-*.json
+    rm -f -- 2026-*.html 2026-*.json 2027-*.html 2027-*.json
+  '
 fi
 
 echo
