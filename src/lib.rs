@@ -3224,6 +3224,75 @@ async fn try_file_io(client: &Client, bytes: &[u8], filename: &str, mime: &str) 
     Ok(link.to_string())
 }
 
+/// Read the configured nomadamas-style publish endpoint and token from env.
+/// Returns `Some((base_url, token))` only when both are non-empty; otherwise `None`.
+pub fn nomadamas_publish_config() -> Option<(String, String)> {
+    let url = std::env::var("BTYU_PUBLISH_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())?;
+    let token = std::env::var("BTYU_PUBLISH_TOKEN")
+        .ok()
+        .filter(|v| !v.trim().is_empty())?;
+    Some((url.trim_end_matches('/').to_string(), token))
+}
+
+/// Try uploading to a Cloudflare-Worker-backed nomadamas.org-style endpoint.
+/// Sends raw bytes (NOT multipart) with `kind` selected from MIME.
+async fn try_nomadamas_share(
+    client: &Client,
+    base_url: &str,
+    token: &str,
+    bytes: &[u8],
+    filename: &str,
+    mime: &str,
+) -> Result<String> {
+    let kind = if mime.starts_with("text/html") {
+        "html"
+    } else if mime == "image/png" {
+        "png"
+    } else if mime.starts_with("application/json") {
+        "json"
+    } else {
+        bail!("unsupported mime for nomadamas share: {mime}");
+    };
+
+    let endpoint = format!(
+        "{}/share?kind={}&filename={}",
+        base_url,
+        kind,
+        urlencoding::encode(filename),
+    );
+
+    let response = client
+        .post(&endpoint)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", mime)
+        .header(
+            "User-Agent",
+            concat!("BetterThanYou/", env!("CARGO_PKG_VERSION")),
+        )
+        .body(bytes.to_vec())
+        .send()
+        .await
+        .with_context(|| "nomadamas: network error")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        bail!("nomadamas HTTP {}: {}", status, body);
+    }
+
+    let payload: Value = response
+        .json()
+        .await
+        .with_context(|| "nomadamas: invalid JSON response")?;
+    let url = payload
+        .get("url")
+        .and_then(|u| u.as_str())
+        .ok_or_else(|| anyhow!("nomadamas: response missing `url` field"))?;
+    Ok(url.to_string())
+}
+
 /// Try uploading to 0x0.st (plain text URL response).
 async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
     let part = reqwest::multipart::Part::bytes(bytes.to_vec())
@@ -3254,6 +3323,21 @@ async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str, mime: &str) -
 async fn publish_bytes_to_web(bytes: &[u8], filename: &str, mime: &str) -> Result<PublishedAsset> {
     let client = Client::new();
     let mut last_err: Option<String> = None;
+
+    // Prefer self-hosted Cloudflare endpoint when configured. Falls back silently on failure.
+    if let Some((base_url, token)) = nomadamas_publish_config() {
+        match try_nomadamas_share(&client, &base_url, &token, bytes, filename, mime).await {
+            Ok(url) => {
+                return Ok(PublishedAsset {
+                    url,
+                    provider: "nomadamas.org".to_string(),
+                });
+            }
+            Err(e) => {
+                last_err = Some(format!("nomadamas.org: {}", e));
+            }
+        }
+    }
 
     // Order: catbox (permanent) → litterbox (72h, very reliable) → tmpfiles → file.io → 0x0.st
     for (name, result) in [

@@ -178,6 +178,10 @@ struct AppState {
     axis_weights: Vec<(String, f32)>,
     #[serde(default)]
     language: Option<Language>,
+    #[serde(default)]
+    publish_base_url: Option<String>,
+    #[serde(default)]
+    publish_token: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -242,6 +246,29 @@ fn save_app_state(state: &AppState) -> Result<()> {
     }
     fs::write(path, serde_json::to_vec_pretty(state)?)?;
     Ok(())
+}
+
+/// Export saved publish endpoint config into the process env so `lib.rs::publish_bytes_to_web`
+/// can pick it up. Real env vars set by the user always win.
+fn apply_publish_env(state: &AppState) {
+    if std::env::var("BTYU_PUBLISH_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .is_none()
+    {
+        if let Some(url) = state.publish_base_url.as_ref().filter(|v| !v.trim().is_empty()) {
+            std::env::set_var("BTYU_PUBLISH_URL", url);
+        }
+    }
+    if std::env::var("BTYU_PUBLISH_TOKEN")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .is_none()
+    {
+        if let Some(token) = state.publish_token.as_ref().filter(|v| !v.trim().is_empty()) {
+            std::env::set_var("BTYU_PUBLISH_TOKEN", token);
+        }
+    }
 }
 
 fn normalize_input(value: String) -> String {
@@ -597,6 +624,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
             "API keys".to_string(),
             "Aesthetic tuning".to_string(),
             "Language".to_string(),
+            "Public sharing (nomadamas.org)".to_string(),
             "Back".to_string(),
         ];
         match select_menu("Settings", &subtitle, &items, 0)? {
@@ -752,6 +780,82 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     Some(index) if index == AXIS_DEFINITIONS.len() => {
                         state.axis_weights.clear();
                         state.app_state.axis_weights.clear();
+                        save_app_state(&state.app_state)?;
+                    }
+                    _ => break,
+                }
+            },
+            Some(8) => loop {
+                let url_status = match state.app_state.publish_base_url.as_deref() {
+                    Some(v) if !v.trim().is_empty() => v.to_string(),
+                    _ => "(not set)".to_string(),
+                };
+                let token_status = match state.app_state.publish_token.as_deref() {
+                    Some(v) if v.len() > 4 => {
+                        let last4 = &v[v.len() - 4..];
+                        format!("\u{2022}\u{2022}\u{2022}\u{2022}{}", last4)
+                    }
+                    Some(v) if !v.is_empty() => "\u{2022}\u{2022}\u{2022}\u{2022}".to_string(),
+                    _ => "(not set)".to_string(),
+                };
+                let subtitle = vec![
+                    "Used by `publish` to upload reports to your Cloudflare Worker.".to_string(),
+                    format!("URL: {}", url_status),
+                    format!("Token: {}", token_status),
+                ];
+                let items = vec![
+                    "Set publish URL (BTYU_PUBLISH_URL)".to_string(),
+                    "Set publish token (BTYU_PUBLISH_TOKEN)".to_string(),
+                    "Clear publish URL".to_string(),
+                    "Clear publish token".to_string(),
+                    "Back".to_string(),
+                ];
+                match select_menu("Public Sharing", &subtitle, &items, 0)? {
+                    Some(0) => {
+                        let current = state.app_state.publish_base_url.clone().unwrap_or_default();
+                        if let Some(url) = ui::text_input(
+                            "Publish URL",
+                            "e.g. https://nomadamas.org (empty = clear)",
+                            &current,
+                            false,
+                        )? {
+                            let trimmed = url.trim().trim_end_matches('/').to_string();
+                            if trimmed.is_empty() {
+                                state.app_state.publish_base_url = None;
+                                std::env::remove_var("BTYU_PUBLISH_URL");
+                            } else {
+                                state.app_state.publish_base_url = Some(trimmed.clone());
+                                std::env::set_var("BTYU_PUBLISH_URL", trimmed);
+                            }
+                            save_app_state(&state.app_state)?;
+                        }
+                    }
+                    Some(1) => {
+                        if let Some(token) = ui::text_input(
+                            "Publish Token",
+                            "Bearer token from your Cloudflare Worker (empty = clear)",
+                            "",
+                            true,
+                        )? {
+                            let trimmed = token.trim().to_string();
+                            if trimmed.is_empty() {
+                                state.app_state.publish_token = None;
+                                std::env::remove_var("BTYU_PUBLISH_TOKEN");
+                            } else {
+                                state.app_state.publish_token = Some(trimmed.clone());
+                                std::env::set_var("BTYU_PUBLISH_TOKEN", trimmed);
+                            }
+                            save_app_state(&state.app_state)?;
+                        }
+                    }
+                    Some(2) => {
+                        state.app_state.publish_base_url = None;
+                        std::env::remove_var("BTYU_PUBLISH_URL");
+                        save_app_state(&state.app_state)?;
+                    }
+                    Some(3) => {
+                        state.app_state.publish_token = None;
+                        std::env::remove_var("BTYU_PUBLISH_TOKEN");
                         save_app_state(&state.app_state)?;
                     }
                     _ => break,
@@ -1093,6 +1197,7 @@ async fn run_interactive_app() -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    apply_publish_env(&load_app_state());
     match cli.command {
         Some(Commands::Battle(args)) => run_battle(args).await,
         Some(Commands::Report(args)) => run_report(args).await,

@@ -1,0 +1,24 @@
+name = "btyu-share"
+main = "src/worker.ts"
+compatibility_date = "2025-04-01"
+workers_dev = false
+
+# Cloudflare account that owns the nomadamas.org zone.
+account_id = "f280e80ebe5465f1d4d54856ec4610b6"
+
+# Worker Routes on the nomadamas.org zone. ROUTES ARE NOT DNS — they intercept
+# requests on existing hostnames; they do not create or delete DNS records.
+routes = [
+  { pattern = "nomadamas.org/btyu/*", zone_name = "nomadamas.org" },
+]
+
+# Workers KV namespace (used in lieu of R2 to avoid card-on-file).
+# Each share file (HTML/PNG/JSON, max 25 MiB) is stored as a single KV value
+# with content-type and timestamps in metadata. ID is filled in by the deploy
+# script after `wrangler kv namespace create btyu-shares` on the target account.
+[[kv_namespaces]]
+binding = "SHARES"
+id = "38f1e5aae5fb46d9a93e0d8b38b703a3"
+
+# Secrets:
+# wrangler secret put PUBLISH_TOKEN
