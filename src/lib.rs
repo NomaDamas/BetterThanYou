@@ -20,6 +20,111 @@ pub const PRODUCT_NAME: &str = "BetterThanYou";
 pub const ENGINE_VERSION: &str = "deterministic-heuristic-v1";
 pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5.4-mini";
 
+/// How many recent battles' artifacts to keep when auto-pruning `reports/`.
+/// Each battle has up to 3 entries (.html, .json, -share/). Default keeps
+/// reports/ around the 10–30 MB range for typical use.
+pub const REPORTS_KEEP_RECENT: usize = 5;
+
+/// Filenames that must NEVER be deleted by `prune_old_reports`.
+const REPORTS_PROTECTED: &[&str] = &[
+    "latest-battle.html",
+    "latest-battle.json",
+    "latest-published.json",
+    ".gitkeep",
+    ".gitignore",
+    ".DS_Store",
+];
+
+/// Extract the battle-id prefix from a filename (e.g.
+/// "2026-04-27t18-45-02-338z-img-0674-trax.html" → "2026-04-27t18-45-02-338z").
+/// Used to group .html, .json, and -share/ entries that belong to the same battle.
+fn extract_battle_prefix(name: &str) -> Option<&str> {
+    let bytes = name.as_bytes();
+    if bytes.len() < 24 {
+        return None;
+    }
+    if !bytes[..4].iter().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if bytes[4] != b'-' {
+        return None;
+    }
+    bytes.iter().position(|&b| b == b'z').map(|i| &name[..=i])
+}
+
+/// Trim `out_dir` to the most recent `keep_recent` battles. Idempotent and
+/// silent when nothing needs to be pruned. Errors are swallowed per-entry so a
+/// stuck file (e.g. open in Preview) never aborts the cleanup.
+///
+/// Returns the number of entries deleted.
+pub fn prune_old_reports(out_dir: &Path, keep_recent: usize) -> usize {
+    if !out_dir.exists() {
+        return 0;
+    }
+    let read_dir = match fs::read_dir(out_dir) {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+
+    use std::collections::HashMap;
+    use std::time::SystemTime;
+
+    let mut groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    let mut group_mtime: HashMap<String, SystemTime> = HashMap::new();
+
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if REPORTS_PROTECTED.iter().any(|p| *p == name.as_str()) {
+            continue;
+        }
+        let prefix = match extract_battle_prefix(&name) {
+            Some(p) => p.to_string(),
+            None => continue,
+        };
+        let mtime = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        groups.entry(prefix.clone()).or_default().push(path);
+        group_mtime
+            .entry(prefix)
+            .and_modify(|cur| {
+                if mtime > *cur {
+                    *cur = mtime;
+                }
+            })
+            .or_insert(mtime);
+    }
+
+    if groups.len() <= keep_recent {
+        return 0;
+    }
+
+    let mut sorted: Vec<(String, SystemTime)> = group_mtime.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut deleted = 0usize;
+    for (prefix, _) in sorted.into_iter().skip(keep_recent) {
+        if let Some(paths) = groups.remove(&prefix) {
+            for path in paths {
+                let removed = if path.is_dir() {
+                    fs::remove_dir_all(&path).is_ok()
+                } else {
+                    fs::remove_file(&path).is_ok()
+                };
+                if removed {
+                    deleted += 1;
+                }
+            }
+        }
+    }
+    deleted
+}
+
 pub const OPENAI_VLM_MODELS: &[&str] = &[
     "gpt-5.4",
     "gpt-5.4-mini",

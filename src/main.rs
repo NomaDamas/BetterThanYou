@@ -10,12 +10,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
     analyze_portrait_battle, default_reports_dir, generate_share_bundle,
-    nomadamas_publish_config, open_path, load_battle_result_for_html, publish_html_to_web,
-    publish_share_bundle_to_web, read_clipboard_text, regenerate_battle_report,
-    render_open_summary, render_report_summary, render_terminal_battle, save_battle_artifacts,
-    serve_reports_blocking, write_clipboard_text,
+    nomadamas_publish_config, open_path, load_battle_result_for_html, prune_old_reports,
+    publish_html_to_web, publish_share_bundle_to_web, read_clipboard_text,
+    regenerate_battle_report, render_open_summary, render_report_summary,
+    render_terminal_battle, save_battle_artifacts, serve_reports_blocking, write_clipboard_text,
     AnalyzeOptions, AXIS_DEFINITIONS, BattleResult, JudgeMode, Language, PublishedShareBundle, t,
-    OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS,
+    OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS, REPORTS_KEEP_RECENT,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -1278,7 +1278,30 @@ async fn run_interactive_app() -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    apply_publish_env(&load_app_state());
+    let app_state = load_app_state();
+    apply_publish_env(&app_state);
+
+    // Auto-prune old reports on every invocation. Skips the active `serve`
+    // session (deleting files mid-serve would 404 anyone currently browsing).
+    if !matches!(cli.command, Some(Commands::Serve(_))) {
+        let out_dir = app_state
+            .out_dir
+            .clone()
+            .or_else(|| {
+                cli.out_dir
+                    .clone()
+                    .or_else(|| match &cli.command {
+                        Some(Commands::Battle(a)) => a.out_dir.clone(),
+                        Some(Commands::Report(a)) => a.out_dir.clone(),
+                        Some(Commands::Open(a)) => a.out_dir.clone(),
+                        Some(Commands::Publish(a)) => a.out_dir.clone(),
+                        _ => None,
+                    })
+            })
+            .unwrap_or_else(default_reports_dir);
+        let _ = prune_old_reports(&out_dir, REPORTS_KEEP_RECENT);
+    }
+
     match cli.command {
         Some(Commands::Battle(args)) => run_battle(args).await,
         Some(Commands::Report(args)) => run_report(args).await,
