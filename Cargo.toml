@@ -30,7 +30,7 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 [dev-dependencies]
 tempfile = "3.16"
 
-# Smaller, faster release binaries. ~16 MB → ~5 MB after `strip = true`.
+# Smaller release binaries. ~16 MB → ~10 MB on macOS arm64.
 [profile.release]
 opt-level = 3
 lto = "thin"
