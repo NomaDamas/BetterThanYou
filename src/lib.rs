@@ -52,6 +52,51 @@ fn extract_battle_prefix(name: &str) -> Option<&str> {
     bytes.iter().position(|&b| b == b'z').map(|i| &name[..=i])
 }
 
+/// Wipe every battle artifact from `out_dir`. Protected files
+/// (`latest-battle.*`, `latest-published.json`, `.gitkeep`, `.gitignore`,
+/// `.DS_Store`) are kept so dotfiles and the "current" pointers survive.
+/// Returns the number of entries deleted.
+pub fn clear_all_reports(out_dir: &Path) -> usize {
+    if !out_dir.exists() {
+        return 0;
+    }
+    let read_dir = match fs::read_dir(out_dir) {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+    let mut deleted = 0usize;
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if REPORTS_PROTECTED.iter().any(|p| *p == name.as_str()) {
+            continue;
+        }
+        if extract_battle_prefix(&name).is_none() {
+            continue;
+        }
+        let removed = if path.is_dir() {
+            fs::remove_dir_all(&path).is_ok()
+        } else {
+            fs::remove_file(&path).is_ok()
+        };
+        if removed {
+            deleted += 1;
+        }
+    }
+    // Also wipe latest-* once the user explicitly clears, since they're
+    // pointers to artifacts we just deleted.
+    for ptr in &["latest-battle.html", "latest-battle.json", "latest-published.json"] {
+        let p = out_dir.join(ptr);
+        if p.exists() && fs::remove_file(&p).is_ok() {
+            deleted += 1;
+        }
+    }
+    deleted
+}
+
 /// Trim `out_dir` to the most recent `keep_recent` battles. Idempotent and
 /// silent when nothing needs to be pruned. Errors are swallowed per-entry so a
 /// stuck file (e.g. open in Preview) never aborts the cleanup.

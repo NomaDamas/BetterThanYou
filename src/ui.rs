@@ -643,9 +643,18 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                         .and_then(|s| serde_json::from_str::<PublishedShareBundle>(&s).ok())
                         .map(|b| b.share_page_url);
 
+                    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
                     if let Some(url) = published_url {
-                        let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
                         let _ = std::process::Command::new(opener).arg(&url).status();
+                    } else if better_than_you::nomadamas_publish_config().is_some() {
+                        // Configured but no sidecar yet (auto-publish failed or
+                        // we're on a stale binary). Fall back to local; the
+                        // next CLI `open` invocation will auto-publish.
+                        if let Some(callback) = on_open {
+                            callback(html_path)?;
+                        } else {
+                            open_path(html_path)?;
+                        }
                     } else if let Some(callback) = on_open {
                         callback(html_path)?;
                     } else {
@@ -1250,7 +1259,7 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                 area,
             );
 
-            let star_height = if star_acknowledged { 0u16 } else { 3 };
+            let star_height = if star_acknowledged { 0u16 } else { 5 };
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -1259,7 +1268,7 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                     Constraint::Length(11),      // faces + VS
                     Constraint::Length(1),       // spacer
                     Constraint::Length(3),       // labels
-                    Constraint::Length(star_height), // star message
+                    Constraint::Length(star_height), // star Y/N modal
                     Constraint::Min(1),         // spacer
                     Constraint::Length(3),       // press any key
                 ])
@@ -1366,7 +1375,7 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
             ))).alignment(Alignment::Center);
             frame_ref.render_widget(right_label, label_cols[2]);
 
-            // ── Star CTA (interactive) ────────────────────────────
+            // ── Star Y/N modal (until acknowledged) ───────────────
             if !star_acknowledged {
                 let star_pulse = match (f / 2) % 4 {
                     0 => Color::Rgb(255, 215, 0),
@@ -1374,41 +1383,66 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                     2 => Color::Rgb(255, 200, 50),
                     _ => Color::Rgb(255, 245, 120),
                 };
-                let star_msg = Paragraph::new(Line::from(vec![
-                    Span::styled("  \u{2B50} ", Style::default().fg(star_pulse)),
-                    Span::styled(
-                        "Press ",
-                        Style::default().fg(DIM_TEXT),
-                    ),
-                    Span::styled(
-                        "[S]",
-                        Style::default().fg(star_pulse).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        " to Star on GitHub \u{2014} it gives the dev a POWER-UP!",
-                        Style::default().fg(DIM_TEXT),
-                    ),
-                    Span::styled(" \u{2B50}  ", Style::default().fg(star_pulse)),
-                ]))
-                .alignment(Alignment::Center);
+                let lines = vec![
+                    Line::from(vec![
+                        Span::styled("\u{2B50}  ", Style::default().fg(star_pulse)),
+                        Span::styled(
+                            "Will you give us a star on GitHub?  It powers up the dev!",
+                            Style::default().fg(star_pulse).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled("  \u{2B50}", Style::default().fg(star_pulse)),
+                    ]),
+                    Line::from(""),
+                    Line::from(vec![
+                        Span::styled(
+                            " [Y] ",
+                            Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            "Yes — auto-open & star",
+                            Style::default().fg(DIM_TEXT),
+                        ),
+                        Span::styled("        ", Style::default()),
+                        Span::styled(
+                            " [N] ",
+                            Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            "No — keep showing this prompt",
+                            Style::default().fg(DIM_TEXT),
+                        ),
+                    ]),
+                ];
+                let star_msg = Paragraph::new(lines)
+                    .alignment(Alignment::Center)
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .border_style(Style::default().fg(star_pulse)),
+                    );
                 frame_ref.render_widget(star_msg, layout[5]);
             }
 
             // ── Footer hotkeys ─────────────────────────────────────
             let blink = (f / 3) % 2 == 0;
-            let mut footer_spans = vec![
-                Span::styled(
+            let mut footer_spans: Vec<Span> = Vec::new();
+            if star_acknowledged {
+                footer_spans.push(Span::styled(
                     " \u{23CE} ENTER",
                     Style::default().fg(if blink { NEON_GREEN } else { Color::Rgb(40, 80, 40) }).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(" Start  ", Style::default().fg(DIM_TEXT)),
-            ];
-            if !star_acknowledged {
-                footer_spans.push(Span::styled(
-                    "S",
-                    Style::default().fg(Color::Rgb(255, 215, 0)).add_modifier(Modifier::BOLD),
                 ));
-                footer_spans.push(Span::styled(" \u{2B50} Star  ", Style::default().fg(DIM_TEXT)));
+                footer_spans.push(Span::styled(" Start  ", Style::default().fg(DIM_TEXT)));
+            } else {
+                footer_spans.push(Span::styled(
+                    " Y",
+                    Style::default().fg(if blink { NEON_GREEN } else { Color::Rgb(40, 80, 40) }).add_modifier(Modifier::BOLD),
+                ));
+                footer_spans.push(Span::styled(" Yes (star)  ", Style::default().fg(DIM_TEXT)));
+                footer_spans.push(Span::styled(
+                    "N",
+                    Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
+                ));
+                footer_spans.push(Span::styled(" No (skip)  ", Style::default().fg(DIM_TEXT)));
             }
             footer_spans.push(Span::styled(
                 "Q",
@@ -1434,11 +1468,21 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
         if event::poll(Duration::from_millis(200))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    return match key.code {
-                        KeyCode::Char('s') | KeyCode::Char('S') if !star_acknowledged => Ok(true),
-                        KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => Ok(false),
-                        _ => Ok(false),
-                    };
+                    if star_acknowledged {
+                        // Already a star supporter — any keypress advances.
+                        return Ok(false);
+                    }
+                    // Pre-acknowledgement: must explicitly answer Y or N.
+                    // Any other key is ignored so the modal stays up.
+                    match key.code {
+                        KeyCode::Char('y') | KeyCode::Char('Y')
+                        | KeyCode::Char('s') | KeyCode::Char('S') => return Ok(true),
+                        KeyCode::Char('n') | KeyCode::Char('N') => return Ok(false),
+                        KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                            return Ok(false);
+                        }
+                        _ => {}
+                    }
                 }
             }
         }

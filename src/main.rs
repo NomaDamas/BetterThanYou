@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
-    analyze_portrait_battle, default_reports_dir, generate_share_bundle,
+    analyze_portrait_battle, clear_all_reports, default_reports_dir, generate_share_bundle,
     nomadamas_publish_config, open_path, load_battle_result_for_html, prune_old_reports,
     publish_html_to_web, publish_share_bundle_to_web, read_clipboard_text,
     regenerate_battle_report, render_open_summary, render_report_summary,
@@ -565,26 +565,60 @@ async fn run_report(args: ReportArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_open(args: OpenArgs) -> Result<()> {
+async fn run_open(args: OpenArgs) -> Result<()> {
     let output_dir = args.out_dir.unwrap_or_else(default_reports_dir);
 
-    if args.target.is_none() {
-        let sidecar = output_dir.join("latest-published.json");
-        if sidecar.exists() {
-            if let Ok(text) = fs::read_to_string(&sidecar) {
-                if let Ok(bundle) = serde_json::from_str::<PublishedShareBundle>(&text) {
+    // Explicit target — always honor, even if local. Caller asked for that file.
+    if let Some(target) = args.target {
+        open_path(&target)?;
+        println!("{}", render_open_summary(&target, io::stdout().is_terminal()));
+        return Ok(());
+    }
+
+    let sidecar = output_dir.join("latest-published.json");
+    let html_path = output_dir.join("latest-battle.html");
+
+    // 1) Sidecar present → open the public URL.
+    if sidecar.exists() {
+        if let Ok(text) = fs::read_to_string(&sidecar) {
+            if let Ok(bundle) = serde_json::from_str::<PublishedShareBundle>(&text) {
+                open_external_url(&bundle.share_page_url);
+                println!("Opened public share page: {}", bundle.share_page_url);
+                println!("  Report : {}", bundle.report_url);
+                return Ok(());
+            }
+        }
+    }
+
+    // 2) No sidecar but we have a battle and publish endpoint → upload now,
+    //    save sidecar, open the public URL. Reports must go via Cloudflare.
+    if html_path.exists() && nomadamas_publish_config().is_some() {
+        if let Ok(result) = load_battle_result_for_html(&html_path) {
+            println!("\u{2601}  Publishing to your share endpoint before opening...");
+            match publish_share_bundle_to_web(&result, &html_path, &output_dir).await {
+                Ok(bundle) => {
+                    if let Ok(json) = serde_json::to_string_pretty(&bundle) {
+                        let _ = fs::write(&sidecar, json);
+                    }
                     open_external_url(&bundle.share_page_url);
-                    println!("Opened public share page: {}", bundle.share_page_url);
-                    println!("  Report : {}", bundle.report_url);
+                    println!("\u{2728} Published & opened: {}", bundle.share_page_url);
                     return Ok(());
+                }
+                Err(e) => {
+                    eprintln!("\u{26A0}  On-demand publish failed: {} — falling back to local file.", e);
                 }
             }
         }
     }
 
-    let path = args.target.unwrap_or_else(|| output_dir.join("latest-battle.html"));
-    open_path(&path)?;
-    println!("{}", render_open_summary(&path, io::stdout().is_terminal()));
+    // 3) Last-resort fallback: local file (only when publish is impossible).
+    if !html_path.exists() {
+        bail!(
+            "No report to open. Run a battle first: better-than-you battle <left> <right>"
+        );
+    }
+    open_path(&html_path)?;
+    println!("{}", render_open_summary(&html_path, io::stdout().is_terminal()));
     Ok(())
 }
 
@@ -693,6 +727,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
             "Aesthetic tuning".to_string(),
             "Language".to_string(),
             "Public sharing (nomadamas.org)".to_string(),
+            "Clear reports history".to_string(),
             "Back".to_string(),
         ];
         match select_menu("Settings", &subtitle, &items, 0)? {
@@ -929,6 +964,41 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     _ => break,
                 }
             },
+            Some(9) => {
+                let confirm_items = vec![
+                    "Yes, delete all saved reports".to_string(),
+                    "Cancel".to_string(),
+                ];
+                let count_msg = match fs::read_dir(&state.out_dir) {
+                    Ok(rd) => rd.flatten().count().to_string(),
+                    Err(_) => "?".to_string(),
+                };
+                let subtitle = vec![
+                    format!(
+                        "This wipes every saved battle artifact in {}",
+                        state.out_dir.display()
+                    ),
+                    format!(
+                        "Currently {} files. The latest-* pointers will be removed too.",
+                        count_msg
+                    ),
+                    "(The Cloudflare-hosted public copies are NOT touched.)".to_string(),
+                ];
+                if let Some(0) = select_menu("Clear Reports History", &subtitle, &confirm_items, 1)? {
+                    let n = clear_all_reports(&state.out_dir);
+                    state.last_html = None;
+                    state.last_json = None;
+                    state.last_result = None;
+                    state.last_published_share = None;
+                    state.last_published_battle_id = None;
+                    let _ = select_menu(
+                        "Cleared",
+                        &[format!("Deleted {} entries.", n)],
+                        &["Back".to_string()],
+                        0,
+                    );
+                }
+            }
             _ => return Ok(()),
         }
     }
@@ -1305,7 +1375,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Battle(args)) => run_battle(args).await,
         Some(Commands::Report(args)) => run_report(args).await,
-        Some(Commands::Open(args)) => run_open(args),
+        Some(Commands::Open(args)) => run_open(args).await,
         Some(Commands::Publish(args)) => run_publish(args).await,
         Some(Commands::Serve(args)) => run_serve(args),
         None => {
