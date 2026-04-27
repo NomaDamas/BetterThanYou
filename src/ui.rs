@@ -3,7 +3,10 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
-use better_than_you::{localized_axis_short, open_path, AxisCard, BattleResult, Language, SavedArtifacts};
+use better_than_you::{
+    localized_axis_short, open_path, AxisCard, BattleResult, Language, PublishedShareBundle,
+    SavedArtifacts,
+};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute};
@@ -631,10 +634,22 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
             }
             match key.code {
                 KeyCode::Char('o') => {
-                    if let Some(callback) = on_open {
-                        callback(Path::new(&artifacts.html_path))?;
+                    let html_path = Path::new(&artifacts.html_path);
+                    let published_url = html_path
+                        .parent()
+                        .map(|dir| dir.join("latest-published.json"))
+                        .filter(|p| p.exists())
+                        .and_then(|p| std::fs::read_to_string(&p).ok())
+                        .and_then(|s| serde_json::from_str::<PublishedShareBundle>(&s).ok())
+                        .map(|b| b.share_page_url);
+
+                    if let Some(url) = published_url {
+                        let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+                        let _ = std::process::Command::new(opener).arg(&url).status();
+                    } else if let Some(callback) = on_open {
+                        callback(html_path)?;
                     } else {
-                        open_path(Path::new(&artifacts.html_path))?;
+                        open_path(html_path)?;
                     }
                     return Ok(());
                 }

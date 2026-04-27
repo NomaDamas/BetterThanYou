@@ -9,10 +9,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
-    analyze_portrait_battle, default_reports_dir, generate_share_bundle, open_path,
-    load_battle_result_for_html, publish_html_to_web, publish_share_bundle_to_web,
-    read_clipboard_text, regenerate_battle_report, render_open_summary, render_report_summary,
-    render_terminal_battle, save_battle_artifacts, serve_reports_blocking, write_clipboard_text,
+    analyze_portrait_battle, default_reports_dir, generate_share_bundle,
+    nomadamas_publish_config, open_path, load_battle_result_for_html, publish_html_to_web,
+    publish_share_bundle_to_web, read_clipboard_text, regenerate_battle_report,
+    render_open_summary, render_report_summary, render_terminal_battle, save_battle_artifacts,
+    serve_reports_blocking, write_clipboard_text,
     AnalyzeOptions, AXIS_DEFINITIONS, BattleResult, JudgeMode, Language, PublishedShareBundle, t,
     OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS,
 };
@@ -81,6 +82,8 @@ struct Cli {
     open: bool,
     #[arg(long)]
     no_app: bool,
+    #[arg(long)]
+    no_publish: bool,
     #[arg(long = "axis-weight", value_name = "KEY=WEIGHT")]
     axis_weights: Vec<String>,
 }
@@ -141,6 +144,9 @@ struct BattleArgs {
     open: bool,
     #[arg(long)]
     no_app: bool,
+    /// Skip auto-publish to nomadamas.org even when BTYU_PUBLISH_URL/TOKEN are configured.
+    #[arg(long)]
+    no_publish: bool,
     #[arg(long = "axis-weight", value_name = "KEY=WEIGHT")]
     axis_weights: Vec<String>,
 }
@@ -467,15 +473,62 @@ async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Re
     Ok((result, artifacts))
 }
 
+/// If a publish endpoint is configured, upload the freshly written report to it
+/// and persist a sidecar `latest-published.json` so `open` can later prefer the
+/// public URL over the local file. Failures degrade gracefully — a stale upload
+/// never blocks a battle.
+async fn auto_publish_if_configured(
+    result: &BattleResult,
+    html_path: &std::path::Path,
+    out_dir: &std::path::Path,
+) -> Option<PublishedShareBundle> {
+    if nomadamas_publish_config().is_none() {
+        return None;
+    }
+    println!("\u{2601}  Auto-publishing to your share endpoint...");
+    match publish_share_bundle_to_web(result, html_path, out_dir).await {
+        Ok(bundle) => {
+            let sidecar = out_dir.join("latest-published.json");
+            if let Ok(json) = serde_json::to_string_pretty(&bundle) {
+                let _ = fs::write(&sidecar, json);
+            }
+            println!("\u{2728} Published: {}", bundle.share_page_url);
+            println!("   Report  : {}", bundle.report_url);
+            println!("   Preview : {}", bundle.preview_image_url);
+            Some(bundle)
+        }
+        Err(e) => {
+            eprintln!("\u{26A0}  Auto-publish failed: {} (kept local copy)", e);
+            None
+        }
+    }
+}
+
 async fn run_battle(args: BattleArgs) -> Result<()> {
     let (result, artifacts) = battle_from_args(&args, None).await?;
+    let output_dir = args.out_dir.clone().unwrap_or_else(default_reports_dir);
+
+    let html_path = PathBuf::from(&artifacts.html_path);
+    let published = if !args.no_publish {
+        auto_publish_if_configured(&result, &html_path, &output_dir).await
+    } else {
+        None
+    };
 
     if args.open {
-        open_path(PathBuf::from(&artifacts.html_path).as_path())?;
+        match published.as_ref() {
+            Some(bundle) => open_external_url(&bundle.share_page_url),
+            None => open_path(html_path.as_path())?,
+        }
     }
 
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({"result": result, "artifacts": artifacts}))?);
+        let payload = serde_json::json!({
+            "result": result,
+            "artifacts": artifacts,
+            "published": published,
+        });
+        println!("{}", serde_json::to_string_pretty(&payload)?);
         return Ok(());
     }
 
@@ -514,6 +567,21 @@ async fn run_report(args: ReportArgs) -> Result<()> {
 
 fn run_open(args: OpenArgs) -> Result<()> {
     let output_dir = args.out_dir.unwrap_or_else(default_reports_dir);
+
+    if args.target.is_none() {
+        let sidecar = output_dir.join("latest-published.json");
+        if sidecar.exists() {
+            if let Ok(text) = fs::read_to_string(&sidecar) {
+                if let Ok(bundle) = serde_json::from_str::<PublishedShareBundle>(&text) {
+                    open_external_url(&bundle.share_page_url);
+                    println!("Opened public share page: {}", bundle.share_page_url);
+                    println!("  Report : {}", bundle.report_url);
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     let path = args.target.unwrap_or_else(|| output_dir.join("latest-battle.html"));
     open_path(&path)?;
     println!("{}", render_open_summary(&path, io::stdout().is_terminal()));
@@ -999,6 +1067,7 @@ async fn run_interactive_app() -> Result<()> {
                     json: false,
                     open: false,
                     no_app: false,
+                    no_publish: false,
                     axis_weights: state.axis_weights.iter().map(|(k, v)| format!("{}={}", k, v)).collect(),
                 };
                 // Set API keys as env vars
@@ -1060,6 +1129,17 @@ async fn run_interactive_app() -> Result<()> {
                 state.last_result = Some(result.clone());
                 state.last_published_share = None;
                 state.last_published_battle_id = None;
+
+                // Auto-publish if user has set up nomadamas-style sharing.
+                // The 'o' key in present_battle_view will then open the public URL.
+                let html_path_for_publish = PathBuf::from(&artifacts.html_path);
+                if let Some(bundle) =
+                    auto_publish_if_configured(&result, &html_path_for_publish, &state.out_dir).await
+                {
+                    state.last_published_share = Some(bundle.clone());
+                    state.last_published_battle_id = Some(result.battle_id.clone());
+                }
+
                 if let Err(_) = ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None) {
                     // TUI error - continue to menu anyway
                 }
@@ -1246,6 +1326,7 @@ async fn main() -> Result<()> {
                 json: cli.json,
                 open: cli.open,
                 no_app: cli.no_app,
+                no_publish: cli.no_publish,
                 axis_weights: cli.axis_weights,
             };
             run_battle(args).await
