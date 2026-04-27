@@ -1,0 +1,22 @@
+# Cargo project-level config.
+#
+# Cargo does NOT expand `~` or env vars in `target-dir`, so we cannot hard-code
+# a per-user path here. To keep build artifacts OUT of this project directory,
+# use ONE of:
+#
+#   1. Make-based workflow (recommended): just run `make build`, `make run`,
+#      `make install` — the Makefile sets CARGO_TARGET_DIR to
+#      ~/.cache/cargo-target/better-than-you so artifacts go there.
+#
+#   2. One-time global setup (applies to plain `cargo` calls too):
+#         make install-shell-hook
+#      Adds `export CARGO_TARGET_DIR="$HOME/.cache/cargo-target"` to ~/.zshrc.
+#
+#   3. Manual: prepend `CARGO_TARGET_DIR=$HOME/.cache/cargo-target` to any
+#      cargo invocation, or `export` it in your shell.
+#
+# Reclaim disk anytime with: `make clean-cache`
+
+# Compile-time perf knobs that are universally safe.
+[build]
+incremental = true

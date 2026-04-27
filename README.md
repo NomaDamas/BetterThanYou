@@ -134,21 +134,31 @@ make size           # show project disk usage
 ## Disk Hygiene
 
 Rust projects accumulate build artifacts in `target/` (often 1+ GB). This
-project is wired to keep that as small as possible:
+repo is wired to keep that **out of the project directory entirely** so it
+stays small regardless of how often you build:
 
 - **End users** install via `brew install` or `cargo install --git` — both
-  build in **temp directories** outside your project, so nothing
-  accumulates in your filesystem after the install completes.
+  build in temp dirs and leave nothing behind in your filesystem.
+- **Developers using `make`**: every `make build` / `make run` /
+  `make install` automatically sets
+  `CARGO_TARGET_DIR=~/.cache/cargo-target/better-than-you`, so artifacts
+  land in your home cache, not in the project. The project directory stays
+  ~10 MB forever.
+- **Developers using `cargo` directly**: run this one-time hook so plain
+  `cargo build`/`cargo run` also redirects:
+  ```bash
+  make install-shell-hook   # appends CARGO_TARGET_DIR export to ~/.zshrc
+  source ~/.zshrc            # apply now
+  ```
 - **Release binary** is shrunk via `Cargo.toml`'s `[profile.release]`
   (`lto = "thin"`, `strip = "symbols"`, `codegen-units = 1`,
-  `incremental = false`). Final binary is ~5 MB instead of ~16 MB.
-- **Developers** running `cargo build` repeatedly should periodically run
-  `make clean-cache` (full reclaim) or `cargo clean` (Rust target only).
-- Optionally, share the Rust target directory across all your projects:
+  `incremental = false`). ~16 MB → ~10 MB on macOS arm64.
+- **Reclaim disk anytime**:
   ```bash
-  export CARGO_TARGET_DIR="$HOME/.cache/cargo-target"
+  make clean-cache    # full reclaim: target/, node_modules/, old reports
+  make clean          # just the build cache
+  make size           # see what's eating space
   ```
-  Add it to your `~/.zshrc` to apply globally.
 
 ## License
 
