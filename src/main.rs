@@ -326,48 +326,100 @@ async fn auto_update_check(skip: bool) {
         "\u{2601}   Auto-installing v{} via cargo... (~1 minute, first run only)",
         latest
     );
+
+    // Build into a throwaway --root so the new binary lands at a known path,
+    // independent of whether the user is running ~/.cargo/bin/... or
+    // /opt/homebrew/bin/... right now. We then replace the currently-running
+    // binary in-place — that way the next launch from the same PATH location
+    // already runs the new version, no matter which one PATH happened to
+    // resolve to.
+    let temp_root = std::env::temp_dir().join("btyu-update");
+    let _ = std::fs::remove_dir_all(&temp_root);
     let status = Command::new("cargo")
         .args([
             "install",
             "--git",
             "https://github.com/NomaDamas/BetterThanYou",
+            "--root",
+            temp_root.to_string_lossy().as_ref(),
             "--force",
             "--quiet",
         ])
         .status();
 
-    match status {
-        Ok(s) if s.success() => {
-            println!("\u{2728} Updated to v{} — relaunching...", latest);
-            // Re-exec the new binary with the same arguments. On Unix we use
-            // `exec()` so the current process is replaced (no zombie parent).
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::CommandExt;
-                let exe = std::env::current_exe()
-                    .or_else(|_| {
-                        let mut home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-                        home.push(".cargo/bin/better-than-you");
-                        Ok::<_, std::io::Error>(home)
-                    })
-                    .ok();
-                if let Some(exe) = exe {
-                    let args: Vec<String> = std::env::args().skip(1).collect();
-                    let _err = Command::new(&exe).args(&args).exec();
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                eprintln!("Update installed. Please re-run `better-than-you` to use v{}.", latest);
-                std::process::exit(0);
-            }
+    if !matches!(status, Ok(s) if s.success()) {
+        eprintln!(
+            "\u{26A0}  Auto-update build failed; continuing on current v{}.",
+            current
+        );
+        return;
+    }
+
+    let new_binary = temp_root.join("bin").join("better-than-you");
+    if !new_binary.exists() {
+        eprintln!("\u{26A0}  Update build finished but binary missing; continuing.");
+        return;
+    }
+
+    // Resolve the running binary through any symlinks (e.g.
+    // /opt/homebrew/bin/better-than-you → Cellar/.../bin/better-than-you).
+    let current_exe = match std::env::current_exe() {
+        Ok(p) => p.canonicalize().unwrap_or(p),
+        Err(_) => {
+            eprintln!("\u{26A0}  Could not locate current binary; aborting in-place update.");
+            return;
         }
-        Ok(_) | Err(_) => {
-            eprintln!(
-                "\u{26A0}  Auto-update failed; continuing on current v{}.",
-                current
-            );
+    };
+
+    // Atomic-ish in-place swap: copy new binary to a sibling temp, then rename
+    // over the original. macOS allows renaming over an open executable.
+    let staging = current_exe.with_extension("new-update");
+    if let Err(e) = std::fs::copy(&new_binary, &staging) {
+        eprintln!(
+            "\u{26A0}  Could not stage new binary at {}: {} — install left in {}.",
+            staging.display(),
+            e,
+            new_binary.display()
+        );
+        return;
+    }
+    // Make sure the staged file is executable.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(&staging) {
+            let mut perms = meta.permissions();
+            perms.set_mode(perms.mode() | 0o755);
+            let _ = std::fs::set_permissions(&staging, perms);
         }
+    }
+    if let Err(e) = std::fs::rename(&staging, &current_exe) {
+        eprintln!(
+            "\u{26A0}  Could not replace {}: {}\n   New binary kept at {}; copy it manually if needed.",
+            current_exe.display(),
+            e,
+            staging.display()
+        );
+        return;
+    }
+
+    println!(
+        "\u{2728} Updated {} to v{} — relaunching...",
+        current_exe.display(),
+        latest
+    );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let _err = Command::new(&current_exe).args(&args).exec();
+        eprintln!("\u{26A0}  Re-exec failed: {:?}", _err);
+    }
+    #[cfg(not(unix))]
+    {
+        eprintln!("Update installed at {}. Re-run `better-than-you`.", current_exe.display());
+        std::process::exit(0);
     }
 }
 
