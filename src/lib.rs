@@ -901,17 +901,6 @@ fn hash_signal(hash: &str, index: usize, scale: f32) -> f32 {
     (value / 255.0) * scale
 }
 
-fn infer_mime_type(source: &str) -> &'static str {
-    let lower = source.to_lowercase();
-    if lower.starts_with("data:image/jpeg") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
-        "image/jpeg"
-    } else if lower.ends_with(".webp") {
-        "image/webp"
-    } else {
-        "image/png"
-    }
-}
-
 fn normalize_source_input(input: &str) -> String {
     let mut value = input.trim().to_string();
     if (value.starts_with('"') && value.ends_with('"')) || (value.starts_with('\'') && value.ends_with('\'')) {

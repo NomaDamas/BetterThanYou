@@ -3,15 +3,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
-use better_than_you::{
-    localized_axis_short, open_path, AxisCard, BattleResult, Language, PublishedShareBundle,
-    SavedArtifacts,
-};
+use better_than_you::{localized_axis_short, BattleResult, Language, SavedArtifacts};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute};
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
@@ -154,76 +151,6 @@ fn game_block_double(title: &str, border_color: Color) -> Block<'_> {
         .border_style(Style::default().fg(border_color))
 }
 
-// ── Axis card for battle view ───────────────────────────────────────────────
-fn axis_line_game(card: &AxisCard, winner_id: &str, bar_width: u16) -> Vec<Line<'static>> {
-    let left_pct = (card.left / 100.0).min(1.0);
-    let right_pct = (card.right / 100.0).min(1.0);
-    let left_filled = (left_pct * bar_width as f32).round() as usize;
-    let right_filled = (right_pct * bar_width as f32).round() as usize;
-    let left_empty = (bar_width as usize).saturating_sub(left_filled);
-    let right_empty = (bar_width as usize).saturating_sub(right_filled);
-
-    let gap_indicator = if card.leader == "tie" {
-        Span::styled(" TIE ", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD))
-    } else if card.leader == winner_id {
-        Span::styled(
-            format!(" +{:.1} ", card.diff),
-            Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
-        )
-    } else {
-        Span::styled(
-            format!(" -{:.1} ", card.diff),
-            Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
-        )
-    };
-
-    let (left_rank, left_rank_color) = score_rank(card.left);
-    let (right_rank, right_rank_color) = score_rank(card.right);
-
-    vec![
-        Line::from(vec![
-            Span::styled(
-                format!(" {:<20}", card.label),
-                Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD),
-            ),
-            gap_indicator,
-        ]),
-        Line::from(vec![
-            Span::styled("  L ", Style::default().fg(NEON_ORANGE)),
-            Span::styled(
-                "\u{2588}".repeat(left_filled),
-                Style::default().fg(stat_bar_color(card.left)),
-            ),
-            Span::styled(
-                "\u{2591}".repeat(left_empty),
-                Style::default().fg(Color::Rgb(40, 40, 60)),
-            ),
-            Span::styled(
-                format!(" {:.1} ", card.left),
-                Style::default().fg(LIGHT_TEXT),
-            ),
-            Span::styled(left_rank, Style::default().fg(left_rank_color).add_modifier(Modifier::BOLD)),
-        ]),
-        Line::from(vec![
-            Span::styled("  R ", Style::default().fg(NEON_BLUE)),
-            Span::styled(
-                "\u{2588}".repeat(right_filled),
-                Style::default().fg(stat_bar_color(card.right)),
-            ),
-            Span::styled(
-                "\u{2591}".repeat(right_empty),
-                Style::default().fg(Color::Rgb(40, 40, 60)),
-            ),
-            Span::styled(
-                format!(" {:.1} ", card.right),
-                Style::default().fg(LIGHT_TEXT),
-            ),
-            Span::styled(right_rank, Style::default().fg(right_rank_color).add_modifier(Modifier::BOLD)),
-        ]),
-    ]
-}
-
-// ── Select menu (game-style) ────────────────────────────────────────────────
 pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index: usize) -> Result<Option<usize>> {
     let mut session = TuiSession::new()?;
     let mut selected = initial_index.min(items.len().saturating_sub(1));
@@ -366,13 +293,6 @@ pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_i
     }
 }
 
-// ── Draw a game-styled panel ────────────────────────────────────────────────
-fn draw_panel(frame: &mut ratatui::Frame<'_>, area: Rect, title: &str, lines: Vec<Line<'static>>, border_color: Color) {
-    let widget = Paragraph::new(lines)
-        .block(game_block(title, border_color))
-        .wrap(Wrap { trim: true });
-    frame.render_widget(widget, area);
-}
 
 // ── VS Header ───────────────────────────────────────────────────────────────
 fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
@@ -448,7 +368,7 @@ pub enum BattleViewExit {
 }
 
 // ── Battle view (game-style) ────────────────────────────────────────────────
-pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _footer_lines: &[String]) -> Result<BattleViewExit> {
+pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _footer_lines: &[String]) -> Result<BattleViewExit> {
     // Detect terminal image protocol BEFORE entering alternate screen so the
     // photos render with the best available format (kitty/iTerm/sixel/halfblocks).
     let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());

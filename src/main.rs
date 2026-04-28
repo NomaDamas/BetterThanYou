@@ -323,7 +323,7 @@ async fn auto_update_check(skip: bool) {
     }
 
     println!(
-        "\u{2601}   Auto-installing v{} via cargo... (~1 minute, first run only)",
+        "\u{2601}   Updating BetterThanYou \u{2192} v{} (silent build, ~1 minute)...",
         latest
     );
 
@@ -333,6 +333,12 @@ async fn auto_update_check(skip: bool) {
     // binary in-place — that way the next launch from the same PATH location
     // already runs the new version, no matter which one PATH happened to
     // resolve to.
+    //
+    // Critical: pipe stdout/stderr to /dev/null. `--quiet` only suppresses
+    // cargo's progress bar; compiler warnings still spam stderr otherwise,
+    // which corrupts the user's terminal state right before the TUI tries
+    // to query it for image rendering protocol — that's what was producing
+    // the "mosaic image" symptom on subsequent launches.
     let temp_root = std::env::temp_dir().join("btyu-update");
     let _ = std::fs::remove_dir_all(&temp_root);
     let status = Command::new("cargo")
@@ -345,6 +351,8 @@ async fn auto_update_check(skip: bool) {
             "--force",
             "--quiet",
         ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status();
 
     if !matches!(status, Ok(s) if s.success()) {
@@ -456,11 +464,6 @@ fn prompt_line(prompt: &str) -> Result<String> {
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
     Ok(normalize_input(input))
-}
-
-fn prompt_optional(prompt: &str) -> Result<Option<String>> {
-    let value = prompt_line(prompt)?;
-    if value.is_empty() { Ok(None) } else { Ok(Some(value)) }
 }
 
 fn read_piped_lines() -> Result<Vec<String>> {
