@@ -3606,6 +3606,52 @@ async fn try_file_io(client: &Client, bytes: &[u8], filename: &str, mime: &str) 
     Ok(link.to_string())
 }
 
+/// Fetch the latest published release tag from GitHub. Returns `Some("0.8.0")`
+/// on success, `None` on any failure (no network, rate limit, etc.) — callers
+/// must degrade gracefully so a busted upstream never blocks startup.
+pub async fn check_latest_release_version() -> Option<String> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .ok()?;
+    let resp = client
+        .get("https://api.github.com/repos/NomaDamas/BetterThanYou/releases/latest")
+        .header(
+            "User-Agent",
+            concat!("BetterThanYou/", env!("CARGO_PKG_VERSION")),
+        )
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: Value = resp.json().await.ok()?;
+    let tag = json.get("tag_name")?.as_str()?;
+    Some(tag.trim_start_matches('v').to_string())
+}
+
+/// Returns true if `latest` is strictly newer than `current` using semver-ish
+/// numeric comparison. Pre-release suffixes (`-rc.1` etc.) are ignored.
+pub fn is_newer_version(latest: &str, current: &str) -> bool {
+    let parse = |s: &str| -> Option<(u32, u32, u32)> {
+        let cleaned = s.split(['-', '+']).next().unwrap_or(s);
+        let parts: Vec<&str> = cleaned.split('.').collect();
+        if parts.len() < 2 {
+            return None;
+        }
+        let major = parts[0].parse().ok()?;
+        let minor = parts[1].parse().ok()?;
+        let patch = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+        Some((major, minor, patch))
+    };
+    match (parse(latest), parse(current)) {
+        (Some(l), Some(c)) => l > c,
+        _ => false,
+    }
+}
+
 /// Read the configured nomadamas-style publish endpoint and token from env.
 /// Returns `Some((base_url, token))` only when both are non-empty; otherwise `None`.
 pub fn nomadamas_publish_config() -> Option<(String, String)> {

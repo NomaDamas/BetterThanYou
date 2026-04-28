@@ -70,6 +70,37 @@ better-than-you serve --port 8080
 
 Set provider keys with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. The default model is `gpt-5.4-mini`; supported model lists live in `src/lib.rs` as `OPENAI_VLM_MODELS`, `ANTHROPIC_VLM_MODELS`, and `GEMINI_VLM_MODELS`.
 
+## How `heuristic` works (no API key required)
+
+`--judge heuristic` runs a fully **local, deterministic** image-statistics
+pipeline. The same pair of images always produces the same scores — no
+network, no model, no API key. It samples each portrait into a 48×60 grid
+of pixel samples (R/G/B + luminance + saturation + center weight) and
+derives the 10 axis scores from regional metrics:
+
+| Axis | Primary signals (heuristic only) |
+| --- | --- |
+| **Facial Symmetry** | Left ↔ right luminance mirror difference across the whole frame. Lower diff → higher score. |
+| **Facial Proportions** | Upper-half vs lower-half mirror balance + how centered the brightest mass is. |
+| **Skin Quality** | Cheek/forehead texture variance (smoother → higher) + saturation uniformity. |
+| **Eye Expression** | Eye-region (upper 28-48% of frame) contrast + edge density. |
+| **Hair & Grooming** | Hair-region (top 30%) edge density + saturation consistency. |
+| **Bone Structure** | Jawline-region (lower 60-90%) edge density + local contrast. |
+| **Expression & Charisma** | Center weight + face warmth (R−B color tilt) + face saturation + dynamic range. |
+| **Lighting & Color** | Whole-frame dynamic range + luminance/saturation deviation + color spread. |
+| **Background & Framing** | Center mass strength + background calmness (low outer variance) + edge strength. |
+| **Photogenic Impact** | Composite of center presence + palette mood + dynamic range + symmetry. |
+
+A small per-axis hash signal (deterministic from the image content) adds
+~0–4 points of variation so two images with similar regional statistics
+don't tie. The result is a stable, fast (sub-second) baseline that runs
+even without internet access. For nuanced judgement (per-axis prose
+explanations, identity-specific commentary), use `--judge openai`,
+`--judge anthropic`, or `--judge gemini` with the corresponding API key.
+
+The full source lives in [`src/lib.rs`](src/lib.rs) under `score_portrait`,
+`compute_mirror_difference`, `region_*` helpers.
+
 ## Scoring
 
 | Axis key | Axis | Short | Weight |

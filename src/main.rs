@@ -9,11 +9,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
-    analyze_portrait_battle, clear_all_reports, default_reports_dir, generate_share_bundle,
-    nomadamas_publish_config, open_path, load_battle_result_for_html, prune_old_reports,
-    publish_html_to_web, publish_share_bundle_to_web, read_clipboard_text,
-    regenerate_battle_report, render_open_summary, render_report_summary,
-    render_terminal_battle, save_battle_artifacts, serve_reports_blocking, write_clipboard_text,
+    analyze_portrait_battle, check_latest_release_version, clear_all_reports, default_reports_dir,
+    generate_share_bundle, is_newer_version, nomadamas_publish_config, open_path,
+    load_battle_result_for_html, prune_old_reports, publish_html_to_web,
+    publish_share_bundle_to_web, read_clipboard_text, regenerate_battle_report,
+    render_open_summary, render_report_summary, render_terminal_battle, save_battle_artifacts,
+    serve_reports_blocking, write_clipboard_text,
     AnalyzeOptions, AXIS_DEFINITIONS, BattleResult, JudgeMode, Language, PublishedShareBundle, t,
     OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS, REPORTS_KEEP_RECENT,
 };
@@ -84,6 +85,9 @@ struct Cli {
     no_app: bool,
     #[arg(long)]
     no_publish: bool,
+    /// Skip the automatic GitHub release version check + self-update on startup.
+    #[arg(long)]
+    no_update: bool,
     #[arg(long = "axis-weight", value_name = "KEY=WEIGHT")]
     axis_weights: Vec<String>,
 }
@@ -188,6 +192,10 @@ struct AppState {
     publish_base_url: Option<String>,
     #[serde(default)]
     publish_token: Option<String>,
+    /// Unix timestamp of the last successful update check, to throttle GitHub
+    /// API hits to ≤ once every 30 minutes when already up to date.
+    #[serde(default)]
+    last_update_check: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -252,6 +260,115 @@ fn save_app_state(state: &AppState) -> Result<()> {
     }
     fs::write(path, serde_json::to_vec_pretty(state)?)?;
     Ok(())
+}
+
+/// Check whether `cargo` is reachable so we can drive a self-install. Without
+/// it we can only notify the user about a new release.
+fn cargo_available() -> bool {
+    Command::new("cargo")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Self-update flow. Called once at the top of `main()`:
+/// 1. Skip if `--no-update` is set, or if we already checked < 30 min ago.
+/// 2. Hit GitHub for the latest release tag (3-second timeout).
+/// 3. If newer AND cargo is on PATH → run `cargo install --git ... --force`,
+///    re-exec the upgraded binary with the same arguments.
+/// 4. On any failure (offline, no cargo, install fails), continue silently
+///    on the current version so a busted upstream never blocks the user.
+async fn auto_update_check(skip: bool) {
+    if skip {
+        return;
+    }
+
+    // Throttle: only check every 30 minutes.
+    let app_state_path = app_state_path();
+    let mut state = load_app_state();
+    let now = chrono::Utc::now().timestamp();
+    if let Some(last) = state.last_update_check {
+        if now - last < 1800 {
+            return;
+        }
+    }
+
+    let Some(latest) = check_latest_release_version().await else {
+        return;
+    };
+    state.last_update_check = Some(now);
+    if let Some(ref _path) = app_state_path {
+        let _ = save_app_state(&state);
+    }
+
+    let current = env!("CARGO_PKG_VERSION");
+    if !is_newer_version(&latest, current) {
+        return;
+    }
+
+    println!(
+        "\u{1F195}  BetterThanYou v{} is available (you're on v{}).",
+        latest, current
+    );
+
+    if !cargo_available() {
+        eprintln!(
+            "   Auto-install needs the Rust toolchain (https://rustup.rs)."
+        );
+        eprintln!(
+            "   Or run: brew upgrade NomaDamas/better-than-you/better-than-you"
+        );
+        return;
+    }
+
+    println!(
+        "\u{2601}   Auto-installing v{} via cargo... (~1 minute, first run only)",
+        latest
+    );
+    let status = Command::new("cargo")
+        .args([
+            "install",
+            "--git",
+            "https://github.com/NomaDamas/BetterThanYou",
+            "--force",
+            "--quiet",
+        ])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("\u{2728} Updated to v{} — relaunching...", latest);
+            // Re-exec the new binary with the same arguments. On Unix we use
+            // `exec()` so the current process is replaced (no zombie parent).
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                let exe = std::env::current_exe()
+                    .or_else(|_| {
+                        let mut home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+                        home.push(".cargo/bin/better-than-you");
+                        Ok::<_, std::io::Error>(home)
+                    })
+                    .ok();
+                if let Some(exe) = exe {
+                    let args: Vec<String> = std::env::args().skip(1).collect();
+                    let _err = Command::new(&exe).args(&args).exec();
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                eprintln!("Update installed. Please re-run `better-than-you` to use v{}.", latest);
+                std::process::exit(0);
+            }
+        }
+        Ok(_) | Err(_) => {
+            eprintln!(
+                "\u{26A0}  Auto-update failed; continuing on current v{}.",
+                current
+            );
+        }
+    }
 }
 
 /// Export saved publish endpoint config into the process env so `lib.rs::publish_bytes_to_web`
@@ -1405,6 +1522,12 @@ async fn run_interactive_app() -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Auto-update check FIRST, before any other startup work. We skip during
+    // `serve` (would interrupt anyone browsing) and when the user opted out.
+    let skip_update = cli.no_update || matches!(cli.command, Some(Commands::Serve(_)));
+    auto_update_check(skip_update).await;
+
     let app_state = load_app_state();
     apply_publish_env(&app_state);
 

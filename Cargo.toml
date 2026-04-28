@@ -1,6 +1,6 @@
 [package]
 name = "better-than-you"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 description = "CLI-first portrait battle tool for fictional AI-generated adult portraits"
 license = "MIT"
