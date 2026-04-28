@@ -322,44 +322,88 @@ async fn auto_update_check(skip: bool) {
         return;
     }
 
-    println!(
-        "\u{2601}   Updating BetterThanYou \u{2192} v{} (silent build, ~1 minute)...",
-        latest
-    );
-
-    // Build into a throwaway --root so the new binary lands at a known path,
-    // independent of whether the user is running ~/.cargo/bin/... or
-    // /opt/homebrew/bin/... right now. We then replace the currently-running
-    // binary in-place — that way the next launch from the same PATH location
-    // already runs the new version, no matter which one PATH happened to
-    // resolve to.
-    //
-    // Critical: pipe stdout/stderr to /dev/null. `--quiet` only suppresses
-    // cargo's progress bar; compiler warnings still spam stderr otherwise,
-    // which corrupts the user's terminal state right before the TUI tries
-    // to query it for image rendering protocol — that's what was producing
-    // the "mosaic image" symptom on subsequent launches.
+    // Build into a throwaway --root and stream cargo's output into a log file
+    // (not /dev/null). The log persists at /tmp/btyu-update.log for any post-
+    // mortem the user wants. cargo's stdout/stderr is kept OFF the terminal
+    // because compiler warnings would otherwise corrupt the terminal state
+    // right before ratatui-image queries it for rendering protocol — that
+    // was the "mosaic image" symptom we hit in v0.8.5.
     let temp_root = std::env::temp_dir().join("btyu-update");
     let _ = std::fs::remove_dir_all(&temp_root);
-    let status = Command::new("cargo")
-        .args([
-            "install",
-            "--git",
-            "https://github.com/NomaDamas/BetterThanYou",
-            "--root",
-            temp_root.to_string_lossy().as_ref(),
-            "--force",
-            "--quiet",
-        ])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+    let log_path = std::env::temp_dir().join("btyu-update.log");
+    let log_file = std::fs::File::create(&log_path).ok();
+    let log_clone = log_file.as_ref().and_then(|f| f.try_clone().ok());
 
-    if !matches!(status, Ok(s) if s.success()) {
+    let mut cmd = Command::new("cargo");
+    cmd.args([
+        "install",
+        "--git",
+        "https://github.com/NomaDamas/BetterThanYou",
+        "--root",
+        temp_root.to_string_lossy().as_ref(),
+        "--force",
+        "--quiet",
+    ]);
+    if let Some(f) = log_file {
+        cmd.stdout(std::process::Stdio::from(f));
+    } else {
+        cmd.stdout(std::process::Stdio::null());
+    }
+    if let Some(f) = log_clone {
+        cmd.stderr(std::process::Stdio::from(f));
+    } else {
+        cmd.stderr(std::process::Stdio::null());
+    }
+
+    // Spinner loop while cargo runs — uses simple \r overwrite so we don't
+    // emit any ANSI sequences that might confuse a basic tty.
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\u{26A0}  Auto-update failed to spawn cargo: {}", e);
+            return;
+        }
+    };
+    let frames = ['\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}', '\u{2834}', '\u{2826}', '\u{2827}', '\u{2807}', '\u{280F}'];
+    let start = std::time::Instant::now();
+    let mut i = 0usize;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break Ok(s),
+            Ok(None) => {
+                use std::io::Write as _;
+                let elapsed = start.elapsed().as_secs();
+                print!(
+                    "\r{} Updating BetterThanYou \u{2192} v{}  ({}s)   ",
+                    frames[i], latest, elapsed
+                );
+                let _ = io::stdout().flush();
+                i = (i + 1) % frames.len();
+                std::thread::sleep(std::time::Duration::from_millis(150));
+            }
+            Err(e) => break Err(e),
+        }
+    };
+    // Clear the spinner line.
+    print!("\r{}\r", " ".repeat(70));
+    let _ = io::stdout().flush();
+
+    if !matches!(status, Ok(ref s) if s.success()) {
         eprintln!(
             "\u{26A0}  Auto-update build failed; continuing on current v{}.",
             current
         );
+        // Show the tail of the log so the user can see WHY it failed
+        // without having to dig for the file themselves.
+        if let Ok(text) = std::fs::read_to_string(&log_path) {
+            let tail: Vec<&str> = text.lines().rev().take(20).collect();
+            if !tail.is_empty() {
+                eprintln!("   Last lines from {}:", log_path.display());
+                for line in tail.iter().rev() {
+                    eprintln!("   | {}", line);
+                }
+            }
+        }
         return;
     }
 
@@ -412,9 +456,10 @@ async fn auto_update_check(skip: bool) {
     }
 
     println!(
-        "\u{2728} Updated {} to v{} — relaunching...",
+        "\u{2728} Updated {} \u{2192} v{} (build log: {}) — relaunching...",
         current_exe.display(),
-        latest
+        latest,
+        log_path.display()
     );
 
     #[cfg(unix)]
