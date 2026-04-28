@@ -2521,6 +2521,132 @@ pub fn render_html_report(result: &BattleResult) -> String {
         .axis-row {{ grid-template-columns: 1fr; }}
         .mini-stats {{ grid-template-columns: repeat(5, 1fr); }}
       }}
+
+      /* ── Street Fighter overlay — aggressive arcade aesthetic ───────── */
+      @import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@600;700;900&display=swap");
+      body {{
+        background:
+          radial-gradient(circle at 18% 26%, rgba(255, 70, 70, 0.32), transparent 38%),
+          radial-gradient(circle at 82% 74%, rgba(64, 158, 255, 0.32), transparent 38%),
+          repeating-linear-gradient(
+            0deg,
+            rgba(255,255,255,0.025) 0px,
+            rgba(255,255,255,0.025) 1px,
+            transparent 1px,
+            transparent 4px
+          ),
+          linear-gradient(145deg, #060810 0%, #0e1320 100%);
+      }}
+      h1, .section-title, .side-name, .side-total-value, .dual-score strong, .winner-name {{
+        font-family: "Orbitron", "Bebas Neue", "Avenir Next", sans-serif !important;
+        letter-spacing: 0.04em !important;
+      }}
+      .hero h1 {{
+        font-family: "Bebas Neue", "Orbitron", sans-serif !important;
+        font-size: clamp(56px, 9vw, 110px) !important;
+        letter-spacing: 0.1em !important;
+        text-transform: uppercase;
+        background: linear-gradient(180deg, #ffe9a8 0%, var(--winner) 50%, #ff8a3c 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: 0 0 28px rgba(255, 211, 107, 0.45);
+        animation: sf-pulse 1.6s ease-in-out infinite alternate;
+      }}
+      @keyframes sf-pulse {{
+        from {{ filter: drop-shadow(0 0 8px rgba(255, 211, 107, 0.4)); }}
+        to {{ filter: drop-shadow(0 0 22px rgba(255, 211, 107, 0.85)); }}
+      }}
+      .verdict {{
+        font-family: "Bebas Neue", "Orbitron", sans-serif !important;
+        font-size: clamp(20px, 2.4vw, 28px) !important;
+        letter-spacing: 0.18em !important;
+        text-transform: uppercase;
+        color: #ff5252 !important;
+      }}
+      .winner-pill {{
+        background: linear-gradient(90deg, rgba(255,70,70,0.25), rgba(255,211,107,0.35), rgba(64,158,255,0.25)) !important;
+        border: 1px solid rgba(255, 211, 107, 0.6);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-family: "Orbitron", sans-serif;
+        font-weight: 700 !important;
+        box-shadow: 0 0 30px rgba(255, 211, 107, 0.25);
+      }}
+      .battle-card {{ position: relative; }}
+      .battle-card::before {{
+        content: "VS";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: "Bebas Neue", "Orbitron", sans-serif;
+        font-size: clamp(60px, 12vw, 160px);
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        background: linear-gradient(180deg, #ffd36b 0%, #ff4646 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: 0 0 30px rgba(255, 70, 70, 0.5);
+        pointer-events: none;
+        z-index: 5;
+        opacity: 0.9;
+        animation: sf-vs-flicker 2s ease-in-out infinite;
+      }}
+      @keyframes sf-vs-flicker {{
+        0%, 100% {{ opacity: 0.92; transform: translate(-50%, -50%) scale(1); }}
+        50% {{ opacity: 0.65; transform: translate(-50%, -50%) scale(1.04); }}
+      }}
+      .battle-side[class*="left"], .battle-side:first-child {{
+        border-left: 6px solid var(--red) !important;
+        box-shadow: -8px 0 32px rgba(255, 70, 70, 0.18);
+      }}
+      .battle-side:last-child {{
+        border-right: 6px solid #4a9eff !important;
+        box-shadow: 8px 0 32px rgba(64, 158, 255, 0.18);
+      }}
+      .battle-side.is-winner {{
+        border-color: var(--winner) !important;
+        box-shadow: 0 0 60px rgba(255, 211, 107, 0.4) !important;
+      }}
+      .side-name {{
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-weight: 900 !important;
+      }}
+      .side-total-value {{
+        font-family: "Bebas Neue", "Orbitron", sans-serif !important;
+        font-size: clamp(54px, 6vw, 76px) !important;
+        letter-spacing: 0.05em !important;
+        text-shadow: 0 0 18px currentColor;
+      }}
+      /* Health-bar style score row above each portrait */
+      .side-total {{ position: relative; }}
+      .side-total::before {{
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 4px;
+        width: 100%;
+        background: linear-gradient(90deg, #ff4646, #ffd36b, #50ff78);
+        opacity: 0.85;
+        box-shadow: 0 0 12px rgba(255, 211, 107, 0.6);
+      }}
+      .rank-badge-big {{
+        font-family: "Orbitron", sans-serif !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.08em !important;
+        text-shadow: 0 0 12px currentColor;
+      }}
+      .section-title {{
+        font-family: "Bebas Neue", "Orbitron", sans-serif !important;
+        font-size: 26px !important;
+        letter-spacing: 0.18em !important;
+        color: var(--accent) !important;
+      }}
+      .section-title::before {{ content: "▸ "; color: var(--red); }}
     </style>
   </head>
   <body>
@@ -3194,6 +3320,81 @@ fn render_public_share_page(
         background: var(--accent);
         color: #1a0c00;
         border-color: transparent;
+      }}
+
+      /* ── Street Fighter overlay ─────────────────────────────────────── */
+      @import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@600;700;900&display=swap");
+      body {{
+        background:
+          radial-gradient(circle at 18% 26%, rgba(255, 70, 70, 0.32), transparent 38%),
+          radial-gradient(circle at 82% 74%, rgba(64, 158, 255, 0.32), transparent 38%),
+          repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 4px),
+          var(--bg);
+      }}
+      .eyebrow {{
+        font-family: "Orbitron", sans-serif !important;
+        font-weight: 700;
+        font-size: 13px !important;
+        letter-spacing: 0.32em !important;
+      }}
+      h1 {{
+        font-family: "Bebas Neue", "Orbitron", sans-serif !important;
+        font-size: clamp(48px, 9vw, 96px) !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase;
+        background: linear-gradient(180deg, #ffe9a8 0%, #ffd36b 50%, #ff8a3c 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: 0 0 26px rgba(255, 211, 107, 0.4);
+        animation: sf-pulse 1.6s ease-in-out infinite alternate;
+      }}
+      @keyframes sf-pulse {{
+        from {{ filter: drop-shadow(0 0 6px rgba(255, 211, 107, 0.35)); }}
+        to {{ filter: drop-shadow(0 0 22px rgba(255, 211, 107, 0.85)); }}
+      }}
+      .stats {{
+        display: grid !important;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 12px;
+        margin-top: 18px;
+      }}
+      .stats .card {{
+        font-family: "Orbitron", sans-serif;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 12px;
+        color: var(--muted);
+        text-align: center;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }}
+      .stats .card strong {{
+        display: block;
+        margin-top: 6px;
+        font-family: "Bebas Neue", "Orbitron", sans-serif;
+        font-size: 36px;
+        letter-spacing: 0.06em;
+        color: var(--accent);
+        text-shadow: 0 0 14px rgba(255, 143, 66, 0.6);
+      }}
+      .stats .card:nth-child(1) {{ border-left: 4px solid #ff4646; }}
+      .stats .card:nth-child(3) {{ border-right: 4px solid #4a9eff; }}
+      .button.primary {{
+        font-family: "Orbitron", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        background: linear-gradient(90deg, #ff4646 0%, #ffd36b 50%, #4a9eff 100%);
+        color: #0a0d13;
+        box-shadow: 0 0 24px rgba(255, 211, 107, 0.45);
+      }}
+      .button {{
+        font-family: "Orbitron", sans-serif;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-size: 13px;
       }}
     </style>
   </head>
