@@ -9,7 +9,7 @@ use chrono::Utc;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute};
-use image::{imageops, DynamicImage, Rgba, RgbaImage};
+use image::{imageops, DynamicImage, ImageDecoder, Rgba, RgbaImage};
 use font8x8::{BASIC_FONTS, UnicodeFonts};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -958,10 +958,35 @@ async fn load_portrait(source: &str, label: Option<&str>, side: &str) -> Result<
         bail!("unsupported portrait input: {normalized}");
     };
 
-    let image = image::load_from_memory(&bytes).context("failed to decode image")?;
-    let mime = infer_mime_type(&normalized);
-    let hash = hash_bytes(&bytes);
-    // Label priority: explicit user label > filename stem > side fallback ("left"/"right")
+    // Apply EXIF orientation so the analysis pixels match what the user's
+    // camera reported. Without this, photos with non-default EXIF orientation
+    // (especially front-camera selfies with the mirror flag) render flipped
+    // in the browser HTML report but un-flipped in the share PNG, producing
+    // a confusing left/right-reversed image. After this fix the data URL is
+    // a re-encoded PNG with no EXIF metadata, so analysis, browser, and
+    // share PNG all agree on the same orientation.
+    use std::io::Cursor;
+    let reader = image::ImageReader::new(Cursor::new(&bytes))
+        .with_guessed_format()
+        .context("failed to detect image format")?;
+    let mut decoder = reader
+        .into_decoder()
+        .context("failed to create image decoder")?;
+    let orientation = decoder
+        .orientation()
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut image = image::DynamicImage::from_decoder(decoder)
+        .context("failed to decode image")?;
+    image.apply_orientation(orientation);
+
+    // Re-encode to PNG so the data URL has no EXIF, guaranteeing browsers
+    // render the same pixels we just analyzed.
+    let mut png_bytes: Vec<u8> = Vec::new();
+    image
+        .write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)
+        .context("failed to re-encode portrait as PNG")?;
+
+    let hash = hash_bytes(&png_bytes);
     let final_label = label
         .map(str::to_string)
         .filter(|s| !s.is_empty())
@@ -975,7 +1000,10 @@ async fn load_portrait(source: &str, label: Option<&str>, side: &str) -> Result<
         width: image.width(),
         height: image.height(),
         hash,
-        image_data_url: format!("data:{};base64,{}", mime, base64::engine::general_purpose::STANDARD.encode(&bytes)),
+        image_data_url: format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(&png_bytes)
+        ),
         image,
     })
 }

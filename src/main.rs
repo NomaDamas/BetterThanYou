@@ -1144,6 +1144,29 @@ async fn run_interactive_app() -> Result<()> {
                         Some((left, right)) => {
                             state.left = Some(left);
                             state.right = Some(right);
+                            // Optional per-portrait label customization right
+                            // after path entry. Empty input → fall back to
+                            // filename stem (handled in load_portrait).
+                            let left_default = state.left_label.clone().unwrap_or_default();
+                            if let Some(label) = ui::text_input(
+                                "Left fighter name (optional)",
+                                "Press Enter to use the filename, or type a custom name",
+                                &left_default,
+                                false,
+                            )? {
+                                let trimmed = label.trim().to_string();
+                                state.left_label = if trimmed.is_empty() { None } else { Some(trimmed) };
+                            }
+                            let right_default = state.right_label.clone().unwrap_or_default();
+                            if let Some(label) = ui::text_input(
+                                "Right fighter name (optional)",
+                                "Press Enter to use the filename, or type a custom name",
+                                &right_default,
+                                false,
+                            )? {
+                                let trimmed = label.trim().to_string();
+                                state.right_label = if trimmed.is_empty() { None } else { Some(trimmed) };
+                            }
                         }
                         None => continue, // User pressed ESC
                     }
