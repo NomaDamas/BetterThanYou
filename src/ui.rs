@@ -19,6 +19,16 @@ use ratatui::Terminal;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
+use base64::Engine as _;
+
+fn try_load_preview_from_data_url(data_url: &str, picker: &mut Picker) -> Option<StatefulProtocol> {
+    let (_, encoded) = data_url.split_once(',')?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded.replace(['\r', '\n'], ""))
+        .ok()?;
+    let img = image::load_from_memory(&bytes).ok()?;
+    Some(picker.new_resize_protocol(img))
+}
 
 // ── Game color palette ──────────────────────────────────────────────────────
 const NEON_GOLD: Color = Color::Rgb(255, 214, 107);
@@ -428,7 +438,14 @@ fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
 
 // ── Battle view (game-style) ────────────────────────────────────────────────
 pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _footer_lines: &[String], on_open: Option<fn(&Path) -> Result<()>>) -> Result<()> {
+    // Detect terminal image protocol BEFORE entering alternate screen so the
+    // photos render with the best available format (kitty/iTerm/sixel/halfblocks).
+    let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+    let mut left_proto = try_load_preview_from_data_url(&result.inputs.left.image_data_url, &mut picker);
+    let mut right_proto = try_load_preview_from_data_url(&result.inputs.right.image_data_url, &mut picker);
+
     let mut session = TuiSession::new()?;
+    let mut scroll: u16 = 0;
 
     // Drain any buffered input events from prior screens (e.g. loading animation)
     while event::poll(Duration::from_millis(1))? {
@@ -452,16 +469,55 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
             // Compact: 1 line per axis + 2 for borders
             let stat_height = (axis_count as u16) + 2;
 
+            // Reserve enough room for photo thumbnails when the terminal is tall
+            // enough; otherwise hide them to keep the analysis readable.
+            let photo_height: u16 = if area.height >= 40 { 12 } else { 0 };
+
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Length(6),                    // VS header
+                    Constraint::Length(photo_height),         // portraits row
                     Constraint::Length(dual_height),          // dual-score bar (optional)
                     Constraint::Length(stat_height),          // side-by-side stats
-                    Constraint::Min(5),                       // analysis
+                    Constraint::Min(5),                       // analysis (scrollable)
                     Constraint::Length(3),                    // footer/hotkeys
                 ])
                 .split(area);
+
+            // ── Portrait thumbnails row ────────────────────────────────
+            if photo_height > 0 {
+                let photo_cols = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .split(layout[1]);
+                let left_block = Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(NEON_ORANGE))
+                    .title(Span::styled(
+                        format!(" \u{1F7E0} {} ", result.inputs.left.label),
+                        Style::default().fg(NEON_ORANGE).add_modifier(Modifier::BOLD),
+                    ));
+                let left_inner = left_block.inner(photo_cols[0]);
+                frame.render_widget(left_block, photo_cols[0]);
+                if let Some(proto) = left_proto.as_mut() {
+                    let widget = StatefulImage::new();
+                    frame.render_stateful_widget(widget, left_inner, proto);
+                }
+                let right_block = Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(NEON_BLUE))
+                    .title(Span::styled(
+                        format!(" \u{1F535} {} ", result.inputs.right.label),
+                        Style::default().fg(NEON_BLUE).add_modifier(Modifier::BOLD),
+                    ));
+                let right_inner = right_block.inner(photo_cols[1]);
+                frame.render_widget(right_block, photo_cols[1]);
+                if let Some(proto) = right_proto.as_mut() {
+                    let widget = StatefulImage::new();
+                    frame.render_stateful_widget(widget, right_inner, proto);
+                }
+            }
 
             // ── VS Header with scores ──────────────────────────────────
             let hero_lines = vs_header(result);
@@ -504,7 +560,7 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                         .block(Block::default().borders(Borders::ALL)
                             .title(Span::styled(" DUAL SCORE ", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)))
                             .border_style(Style::default().fg(NEON_CYAN)));
-                    frame.render_widget(dual_panel, layout[1]);
+                    frame.render_widget(dual_panel, layout[2]);
                 }
             }
 
@@ -512,7 +568,7 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
             let stat_cols = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(45), Constraint::Percentage(10), Constraint::Percentage(45)])
-                .split(layout[2]);
+                .split(layout[3]);
 
             // Resolve UI language from the battle result (falls back to English)
             let ui_lang = match result.language.as_deref() {
@@ -610,7 +666,19 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                     Span::styled(result.sections.model_jury_notes.clone(), Style::default().fg(DIM_TEXT)),
                 ]),
             ];
-            draw_panel(frame, layout[3], "JUDGE ANALYSIS", analysis, NEON_PURPLE);
+            // Scrollable analysis panel — vertical offset is `scroll`.
+            let analysis_block = Block::default()
+                .borders(Borders::ALL)
+                .title(Span::styled(
+                    " JUDGE ANALYSIS ",
+                    Style::default().fg(NEON_PURPLE).add_modifier(Modifier::BOLD),
+                ))
+                .border_style(Style::default().fg(NEON_PURPLE));
+            let analysis_paragraph = Paragraph::new(analysis)
+                .block(analysis_block)
+                .wrap(Wrap { trim: false })
+                .scroll((scroll, 0));
+            frame.render_widget(analysis_paragraph, layout[4]);
 
             // ── Footer/hotkeys ─────────────────────────────────────────
             let footer = Paragraph::new(Line::from(vec![
@@ -619,13 +687,17 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                 Span::styled("q", Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD)),
                 Span::styled(" Return  ", Style::default().fg(DIM_TEXT)),
                 Span::styled("o", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
-                Span::styled(" Open Report", Style::default().fg(DIM_TEXT)),
+                Span::styled(" Open Report  ", Style::default().fg(DIM_TEXT)),
+                Span::styled("\u{2191}\u{2193}", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled("/", Style::default().fg(DIM_TEXT)),
+                Span::styled("j/k", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(" Scroll", Style::default().fg(DIM_TEXT)),
             ]))
             .alignment(Alignment::Center)
             .block(Block::default()
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
-            frame.render_widget(footer, layout[4]);
+            frame.render_widget(footer, layout[5]);
         })?;
 
         if let Event::Key(key) = event::read()? {
@@ -663,6 +735,21 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                     return Ok(());
                 }
                 KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => return Ok(()),
+                KeyCode::Up | KeyCode::Char('k') => {
+                    scroll = scroll.saturating_sub(1);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    scroll = scroll.saturating_add(1);
+                }
+                KeyCode::PageUp => {
+                    scroll = scroll.saturating_sub(5);
+                }
+                KeyCode::PageDown => {
+                    scroll = scroll.saturating_add(5);
+                }
+                KeyCode::Home => {
+                    scroll = 0;
+                }
                 _ => {}
             }
         }
