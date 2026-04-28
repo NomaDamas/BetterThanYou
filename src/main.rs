@@ -661,12 +661,45 @@ async fn run_battle(args: BattleArgs) -> Result<()> {
     }
 
     if !args.no_app && io::stdin().is_terminal() && io::stdout().is_terminal() {
-        ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None)?;
+        let exit = ui::present_battle_view(
+            &result,
+            &artifacts,
+            &["Enter/q return".to_string(), "o open report".to_string()],
+        )?;
+        if matches!(exit, ui::BattleViewExit::OpenRequest) {
+            handle_open_request(&result, &html_path, &output_dir).await;
+        }
     } else {
         println!("{}", render_terminal_battle(&result, &artifacts, io::stdout().is_terminal()));
     }
 
     Ok(())
+}
+
+/// Honor an `o` keypress from the battle view: prefer the public URL
+/// (sidecar → cached → publish-on-demand), only fall back to the local
+/// `file://` if publishing isn't configured at all.
+async fn handle_open_request(
+    result: &BattleResult,
+    html_path: &std::path::Path,
+    out_dir: &std::path::Path,
+) {
+    let sidecar = out_dir.join("latest-published.json");
+    if sidecar.exists() {
+        if let Ok(text) = fs::read_to_string(&sidecar) {
+            if let Ok(bundle) = serde_json::from_str::<PublishedShareBundle>(&text) {
+                open_external_url(&bundle.share_page_url);
+                return;
+            }
+        }
+    }
+    if nomadamas_publish_config().is_some() {
+        if let Some(bundle) = auto_publish_if_configured(result, html_path, out_dir, false).await {
+            open_external_url(&bundle.share_page_url);
+            return;
+        }
+    }
+    let _ = open_path(html_path);
 }
 
 async fn run_report(args: ReportArgs) -> Result<()> {
@@ -1378,8 +1411,20 @@ async fn run_interactive_app() -> Result<()> {
                     state.last_published_battle_id = Some(result.battle_id.clone());
                 }
 
-                if let Err(_) = ui::present_battle_view(&result, &artifacts, &["Enter/q return".to_string(), "o open report".to_string()], None) {
-                    // TUI error - continue to menu anyway
+                match ui::present_battle_view(
+                    &result,
+                    &artifacts,
+                    &["Enter/q return".to_string(), "o open report".to_string()],
+                ) {
+                    Ok(ui::BattleViewExit::OpenRequest) => {
+                        handle_open_request(
+                            &result,
+                            &PathBuf::from(&artifacts.html_path),
+                            &state.out_dir,
+                        )
+                        .await;
+                    }
+                    _ => {}
                 }
 
                 loop {

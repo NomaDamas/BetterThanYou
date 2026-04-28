@@ -436,8 +436,19 @@ fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
     ]
 }
 
+/// What the user did before exiting the battle view. The caller (which has
+/// the async runtime + session state) handles `OpenRequest` by either
+/// opening a cached published URL, publishing-on-demand, or falling back
+/// to the local file. Keeping this decision in the caller is what lets us
+/// force a Cloudflare upload when the user explicitly hits `o` on a battle
+/// whose auto-publish step failed transiently.
+pub enum BattleViewExit {
+    Quit,
+    OpenRequest,
+}
+
 // ── Battle view (game-style) ────────────────────────────────────────────────
-pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _footer_lines: &[String], on_open: Option<fn(&Path) -> Result<()>>) -> Result<()> {
+pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _footer_lines: &[String]) -> Result<BattleViewExit> {
     // Detect terminal image protocol BEFORE entering alternate screen so the
     // photos render with the best available format (kitty/iTerm/sixel/halfblocks).
     let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
@@ -705,36 +716,8 @@ pub fn present_battle_view(result: &BattleResult, artifacts: &SavedArtifacts, _f
                 continue;
             }
             match key.code {
-                KeyCode::Char('o') => {
-                    let html_path = Path::new(&artifacts.html_path);
-                    let published_url = html_path
-                        .parent()
-                        .map(|dir| dir.join("latest-published.json"))
-                        .filter(|p| p.exists())
-                        .and_then(|p| std::fs::read_to_string(&p).ok())
-                        .and_then(|s| serde_json::from_str::<PublishedShareBundle>(&s).ok())
-                        .map(|b| b.share_page_url);
-
-                    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-                    if let Some(url) = published_url {
-                        let _ = std::process::Command::new(opener).arg(&url).status();
-                    } else if better_than_you::nomadamas_publish_config().is_some() {
-                        // Configured but no sidecar yet (auto-publish failed or
-                        // we're on a stale binary). Fall back to local; the
-                        // next CLI `open` invocation will auto-publish.
-                        if let Some(callback) = on_open {
-                            callback(html_path)?;
-                        } else {
-                            open_path(html_path)?;
-                        }
-                    } else if let Some(callback) = on_open {
-                        callback(html_path)?;
-                    } else {
-                        open_path(html_path)?;
-                    }
-                    return Ok(());
-                }
-                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => return Ok(()),
+                KeyCode::Char('o') => return Ok(BattleViewExit::OpenRequest),
+                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => return Ok(BattleViewExit::Quit),
                 KeyCode::Up | KeyCode::Char('k') => {
                     scroll = scroll.saturating_sub(1);
                 }
