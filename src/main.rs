@@ -642,6 +642,18 @@ async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Re
     Ok((result, artifacts))
 }
 
+/// Sidecar wraps the published bundle with the originating battle_id so the
+/// TUI 'o' key can detect whether the cached URL matches the battle on
+/// screen. `#[serde(flatten)]` keeps the JSON compatible with the previous
+/// flat shape — older sidecars without `battle_id` still parse as a
+/// `PublishedShareBundle` for `run_open` (which just wants the latest URL).
+#[derive(Serialize, Deserialize)]
+struct LatestPublishedSidecar {
+    battle_id: String,
+    #[serde(flatten)]
+    bundle: PublishedShareBundle,
+}
+
 /// If a publish endpoint is configured, upload the freshly written report to
 /// it and persist a sidecar `latest-published.json` so `open` can later prefer
 /// the public URL over the local file. Failures degrade gracefully.
@@ -664,7 +676,11 @@ async fn auto_publish_if_configured(
     match publish_share_bundle_to_web(result, html_path, out_dir).await {
         Ok(bundle) => {
             let sidecar = out_dir.join("latest-published.json");
-            if let Ok(json) = serde_json::to_string_pretty(&bundle) {
+            let payload = LatestPublishedSidecar {
+                battle_id: result.battle_id.clone(),
+                bundle: bundle.clone(),
+            };
+            if let Ok(json) = serde_json::to_string_pretty(&payload) {
                 let _ = fs::write(&sidecar, json);
             }
             if verbose {
@@ -737,11 +753,18 @@ async fn handle_open_request(
     out_dir: &std::path::Path,
 ) {
     let sidecar = out_dir.join("latest-published.json");
+    // Only trust the sidecar when its battle_id matches the battle the user
+    // is looking at. Otherwise (no sidecar, parse error, mismatched id) we
+    // re-publish on demand for THIS battle. Without this guard, a TUI 'o'
+    // press on a battle whose auto-publish failed transiently would open the
+    // PREVIOUS battle's URL, which is the bug this commit closes.
     if sidecar.exists() {
         if let Ok(text) = fs::read_to_string(&sidecar) {
-            if let Ok(bundle) = serde_json::from_str::<PublishedShareBundle>(&text) {
-                open_external_url(&bundle.share_page_url);
-                return;
+            if let Ok(s) = serde_json::from_str::<LatestPublishedSidecar>(&text) {
+                if s.battle_id == result.battle_id {
+                    open_external_url(&s.bundle.share_page_url);
+                    return;
+                }
             }
         }
     }
