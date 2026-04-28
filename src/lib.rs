@@ -185,25 +185,28 @@ pub const OPENAI_VLM_MODELS: &[&str] = &[
     "o4-mini",
 ];
 
+// Models verified active for vision/multimodal use as of 2026-04-28.
+// Source: https://platform.claude.com/docs/en/about-claude/models/overview
+// Removed: claude-{sonnet,opus}-4-20250514 (deprecated, retire 2026-06-15).
 pub const ANTHROPIC_VLM_MODELS: &[&str] = &[
-    "claude-opus-4-6",
+    "claude-opus-4-7",
     "claude-sonnet-4-6",
     "claude-haiku-4-5-20251001",
+    "claude-opus-4-6",
     "claude-sonnet-4-5-20250929",
     "claude-opus-4-5-20251101",
     "claude-opus-4-1-20250805",
-    "claude-sonnet-4-20250514",
-    "claude-opus-4-20250514",
 ];
 
+// Source: https://ai.google.dev/gemini-api/docs/models
+// Removed: gemini-2.0-flash (deprecated, shuts down 2026-06-01).
 pub const GEMINI_VLM_MODELS: &[&str] = &[
     "gemini-3.1-pro-preview",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite-preview",
+    "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
-    "gemini-2.0-flash",
 ];
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

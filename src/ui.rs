@@ -1395,20 +1395,20 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                     Line::from(""),
                     Line::from(vec![
                         Span::styled(
-                            " [Y] ",
+                            " [Y/Enter] ",
                             Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
-                            "Yes — auto-open & star",
+                            "Yes — open GitHub to star",
                             Style::default().fg(DIM_TEXT),
                         ),
-                        Span::styled("        ", Style::default()),
+                        Span::styled("    ", Style::default()),
                         Span::styled(
                             " [N] ",
                             Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
-                            "No — keep showing this prompt",
+                            "No — keep asking",
                             Style::default().fg(DIM_TEXT),
                         ),
                     ]),
@@ -1472,11 +1472,14 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                         // Already a star supporter — any keypress advances.
                         return Ok(false);
                     }
-                    // Pre-acknowledgement: must explicitly answer Y or N.
+                    // Pre-acknowledgement: Y / Yes / Enter / Space / S all
+                    // count as yes (open GitHub + remember). N rejects.
                     // Any other key is ignored so the modal stays up.
                     match key.code {
                         KeyCode::Char('y') | KeyCode::Char('Y')
-                        | KeyCode::Char('s') | KeyCode::Char('S') => return Ok(true),
+                        | KeyCode::Char('s') | KeyCode::Char('S')
+                        | KeyCode::Enter
+                        | KeyCode::Char(' ') => return Ok(true),
                         KeyCode::Char('n') | KeyCode::Char('N') => return Ok(false),
                         KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                             return Ok(false);

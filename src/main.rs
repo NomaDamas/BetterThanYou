@@ -473,32 +473,42 @@ async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Re
     Ok((result, artifacts))
 }
 
-/// If a publish endpoint is configured, upload the freshly written report to it
-/// and persist a sidecar `latest-published.json` so `open` can later prefer the
-/// public URL over the local file. Failures degrade gracefully — a stale upload
-/// never blocks a battle.
+/// If a publish endpoint is configured, upload the freshly written report to
+/// it and persist a sidecar `latest-published.json` so `open` can later prefer
+/// the public URL over the local file. Failures degrade gracefully.
+///
+/// `verbose=true` is for the non-TUI subcommand path; `verbose=false` keeps
+/// stdout clean inside the interactive TUI flow (otherwise prints leak above
+/// the alt-screen frame and break the UX).
 async fn auto_publish_if_configured(
     result: &BattleResult,
     html_path: &std::path::Path,
     out_dir: &std::path::Path,
+    verbose: bool,
 ) -> Option<PublishedShareBundle> {
     if nomadamas_publish_config().is_none() {
         return None;
     }
-    println!("\u{2601}  Auto-publishing to your share endpoint...");
+    if verbose {
+        println!("\u{2601}  Auto-publishing to your share endpoint...");
+    }
     match publish_share_bundle_to_web(result, html_path, out_dir).await {
         Ok(bundle) => {
             let sidecar = out_dir.join("latest-published.json");
             if let Ok(json) = serde_json::to_string_pretty(&bundle) {
                 let _ = fs::write(&sidecar, json);
             }
-            println!("\u{2728} Published: {}", bundle.share_page_url);
-            println!("   Report  : {}", bundle.report_url);
-            println!("   Preview : {}", bundle.preview_image_url);
+            if verbose {
+                println!("\u{2728} Published: {}", bundle.share_page_url);
+                println!("   Report  : {}", bundle.report_url);
+                println!("   Preview : {}", bundle.preview_image_url);
+            }
             Some(bundle)
         }
         Err(e) => {
-            eprintln!("\u{26A0}  Auto-publish failed: {} (kept local copy)", e);
+            if verbose {
+                eprintln!("\u{26A0}  Auto-publish failed: {} (kept local copy)", e);
+            }
             None
         }
     }
@@ -509,8 +519,9 @@ async fn run_battle(args: BattleArgs) -> Result<()> {
     let output_dir = args.out_dir.clone().unwrap_or_else(default_reports_dir);
 
     let html_path = PathBuf::from(&artifacts.html_path);
+    let tui_mode = !args.no_app && io::stdin().is_terminal() && io::stdout().is_terminal();
     let published = if !args.no_publish {
-        auto_publish_if_configured(&result, &html_path, &output_dir).await
+        auto_publish_if_configured(&result, &html_path, &output_dir, !tui_mode).await
     } else {
         None
     };
@@ -1095,6 +1106,13 @@ async fn run_interactive_app() -> Result<()> {
         }
         items.push(t(lang, "quit").to_string());
 
+        let no_keys = state.app_state.openai_api_key.is_none()
+            && state.app_state.anthropic_api_key.is_none()
+            && state.app_state.gemini_api_key.is_none()
+            && std::env::var("OPENAI_API_KEY").is_err()
+            && std::env::var("ANTHROPIC_API_KEY").is_err()
+            && std::env::var("GEMINI_API_KEY").is_err();
+
         let mut subtitle = vec![
             format!("BetterThanYou v{}", env!("CARGO_PKG_VERSION")),
             "Drop two portraits, get a winner-first battle card, then decide what to do next.".to_string(),
@@ -1102,6 +1120,15 @@ async fn run_interactive_app() -> Result<()> {
             format!("Model: {}", state.model),
             format!("Output: {}", state.out_dir.display()),
         ];
+        if no_keys {
+            subtitle.push(String::new());
+            subtitle.push(
+                "\u{26A0}  No VLM API key set — running heuristic only.".to_string(),
+            );
+            subtitle.push(
+                "   For richer per-axis VLM analysis, add a key in Settings → API keys.".to_string(),
+            );
+        }
         if !state.app_state.star_acknowledged {
             subtitle.push(String::new());
             subtitle.push("\u{2B50} Star one click = dev gets power-up!  github.com/NomaDamas/BetterThanYou".to_string());
@@ -1202,10 +1229,10 @@ async fn run_interactive_app() -> Result<()> {
                 state.last_published_battle_id = None;
 
                 // Auto-publish if user has set up nomadamas-style sharing.
-                // The 'o' key in present_battle_view will then open the public URL.
+                // verbose=false so prints don't leak above the TUI alt-screen.
                 let html_path_for_publish = PathBuf::from(&artifacts.html_path);
                 if let Some(bundle) =
-                    auto_publish_if_configured(&result, &html_path_for_publish, &state.out_dir).await
+                    auto_publish_if_configured(&result, &html_path_for_publish, &state.out_dir, false).await
                 {
                     state.last_published_share = Some(bundle.clone());
                     state.last_published_battle_id = Some(result.battle_id.clone());
@@ -1259,7 +1286,6 @@ async fn run_interactive_app() -> Result<()> {
                         "share_result" => run_share_menu(&mut state).await?,
                         "publish_web" => {
                             let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
-                            println!("\u{2601}  Uploading {} ...", path.display());
                             let publish_result = if let Some(result) = state.last_result.clone() {
                                 publish_share_bundle_to_web(&result, &path, &state.out_dir).await
                                     .map(|bundle| {
@@ -1281,7 +1307,7 @@ async fn run_interactive_app() -> Result<()> {
                                         state.last_published_battle_id = state.last_result.as_ref().map(|result| result.battle_id.clone());
                                         state.last_published_share = Some(bundle);
                                     }
-                                    let body = vec![
+                                    let mut subtitle = vec![
                                         format!("URL: {}", published.0),
                                         format!("Host: {}", published.1),
                                         String::new(),
@@ -1289,13 +1315,10 @@ async fn run_interactive_app() -> Result<()> {
                                         String::new(),
                                         "Scan with your phone camera:".to_string(),
                                     ];
-                                    // Print QR directly to stdout since TUI can't render it cleanly.
-                                    println!();
-                                    for line in &body { println!("{}", line); }
-                                    println!("{}", published.2);
-                                    println!("Press Enter to continue...");
-                                    let mut buf = String::new();
-                                    let _ = io::stdin().read_line(&mut buf);
+                                    for qr_line in published.2.lines() {
+                                        subtitle.push(qr_line.to_string());
+                                    }
+                                    let _ = select_menu("Published", &subtitle, &["OK".to_string()], 0);
                                 }
                                 Err(e) => {
                                     let _ = select_menu("Publish Failed", &[format!("{}", e)], &["Back".to_string()], 0);
@@ -1304,13 +1327,24 @@ async fn run_interactive_app() -> Result<()> {
                         }
                         "serve_lan" => {
                             let out_dir = state.out_dir.clone();
-                            println!();
-                            println!("Starting local server on port 8080...");
-                            println!("Press Ctrl-C in this terminal to stop.");
-                            // Blocks until Ctrl-C
-                            if let Err(e) = serve_reports_blocking(&out_dir, 8080) {
-                                let _ = select_menu("Serve Failed", &[format!("{}", e)], &["Back".to_string()], 0);
-                            }
+                            let _ = select_menu(
+                                "LAN Serve",
+                                &[
+                                    "Local server starts on port 8080 after you confirm.".to_string(),
+                                    "The TUI exits temporarily — press Ctrl-C in the terminal to stop the server.".to_string(),
+                                    "Once stopped, you'll return to this menu.".to_string(),
+                                ],
+                                &["Start server".to_string(), "Cancel".to_string()],
+                                0,
+                            )
+                            .ok()
+                            .flatten()
+                            .filter(|i| *i == 0)
+                            .map(|_| {
+                                if let Err(e) = serve_reports_blocking(&out_dir, 8080) {
+                                    let _ = select_menu("Serve Failed", &[format!("{}", e)], &["Back".to_string()], 0);
+                                }
+                            });
                         }
                         "open_report" => {
                             let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
