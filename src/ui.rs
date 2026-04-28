@@ -371,7 +371,19 @@ pub enum BattleViewExit {
 pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _footer_lines: &[String]) -> Result<BattleViewExit> {
     // Detect terminal image protocol BEFORE entering alternate screen so the
     // photos render with the best available format (kitty/iTerm/sixel/halfblocks).
-    let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+    //
+    // We retry up to 3 times with a small delay because we usually arrive
+    // here right after exiting another TUI session (loading screen). The
+    // terminal can still be in mid-transition, returning bad protocol bytes
+    // on the first query — which falls back to halfblocks ("mosaic" photos).
+    let mut picker = (0..3)
+        .find_map(|attempt| {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(80));
+            }
+            Picker::from_query_stdio().ok()
+        })
+        .unwrap_or_else(Picker::halfblocks);
     let mut left_proto = try_load_preview_from_data_url(&result.inputs.left.image_data_url, &mut picker);
     let mut right_proto = try_load_preview_from_data_url(&result.inputs.right.image_data_url, &mut picker);
 

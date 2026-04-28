@@ -1487,29 +1487,20 @@ async fn run_interactive_app() -> Result<()> {
                 // Run analysis on main async thread
                 let analysis_result = battle_from_args(&args, Some(&state)).await;
 
-                // Stop animation
-                done.store(true, Ordering::Relaxed);
-                // Wait for animation thread to fully exit and restore terminal
-                let _ = anim_thread.join();
-                // Ensure terminal is fully reset after animation thread's TuiSession drop
-                let _ = crossterm::terminal::disable_raw_mode();
-                let _ = crossterm::execute!(
-                    io::stdout(),
-                    crossterm::terminal::LeaveAlternateScreen,
-                    crossterm::cursor::Show
-                );
-                // Brief pause to let terminal settle after mode transitions
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                // Drain any stale events from the loading animation
-                let _ = crossterm::terminal::enable_raw_mode();
-                while crossterm::event::poll(std::time::Duration::from_millis(1)).unwrap_or(false) {
-                    let _ = crossterm::event::read();
-                }
-                let _ = crossterm::terminal::disable_raw_mode();
-
+                // Handle the error case first — we need to stop the loading
+                // screen before showing select_menu.
                 let (result, artifacts) = match analysis_result {
                     Ok(r) => r,
                     Err(e) => {
+                        done.store(true, Ordering::Relaxed);
+                        let _ = anim_thread.join();
+                        let _ = crossterm::terminal::disable_raw_mode();
+                        let _ = crossterm::execute!(
+                            io::stdout(),
+                            crossterm::terminal::LeaveAlternateScreen,
+                            crossterm::cursor::Show
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(100));
                         let msg = format!("{}", e);
                         let _ = select_menu("Battle Failed", &[msg], &["Back".to_string()], 0);
                         state.left = None;
@@ -1517,6 +1508,11 @@ async fn run_interactive_app() -> Result<()> {
                         continue;
                     }
                 };
+
+                // Auto-publish runs WHILE the loading-screen animation is
+                // still on screen. Without this, the TUI blanks out for the
+                // 5–15s of network calls during publish — that's the "TUI
+                // turns off mid-flow" bug. verbose=false keeps stdout clean.
                 state.last_pair = Some((state.left.clone().unwrap_or_default(), state.right.clone().unwrap_or_default()));
                 state.last_json = Some(PathBuf::from(&artifacts.json_path));
                 state.last_html = Some(PathBuf::from(&artifacts.html_path));
@@ -1524,8 +1520,6 @@ async fn run_interactive_app() -> Result<()> {
                 state.last_published_share = None;
                 state.last_published_battle_id = None;
 
-                // Auto-publish if user has set up nomadamas-style sharing.
-                // verbose=false so prints don't leak above the TUI alt-screen.
                 let html_path_for_publish = PathBuf::from(&artifacts.html_path);
                 if let Some(bundle) =
                     auto_publish_if_configured(&result, &html_path_for_publish, &state.out_dir, false).await
@@ -1533,6 +1527,23 @@ async fn run_interactive_app() -> Result<()> {
                     state.last_published_share = Some(bundle.clone());
                     state.last_published_battle_id = Some(result.battle_id.clone());
                 }
+
+                // NOW stop the animation, since we're about to switch to the
+                // result view.
+                done.store(true, Ordering::Relaxed);
+                let _ = anim_thread.join();
+                let _ = crossterm::terminal::disable_raw_mode();
+                let _ = crossterm::execute!(
+                    io::stdout(),
+                    crossterm::terminal::LeaveAlternateScreen,
+                    crossterm::cursor::Show
+                );
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let _ = crossterm::terminal::enable_raw_mode();
+                while crossterm::event::poll(std::time::Duration::from_millis(1)).unwrap_or(false) {
+                    let _ = crossterm::event::read();
+                }
+                let _ = crossterm::terminal::disable_raw_mode();
 
                 match ui::present_battle_view(
                     &result,
