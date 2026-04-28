@@ -1,9 +1,9 @@
 class BetterThanYou < Formula
   desc "CLI-first portrait battle tool for fictional AI-generated adult portraits"
   homepage "https://github.com/NomaDamas/BetterThanYou"
-  url "https://github.com/NomaDamas/BetterThanYou/archive/refs/tags/v0.5.0.tar.gz"
-  version "0.5.0"
-  sha256 "86d9b6e1ed23d4653adfe71c8ead0c4e934a93f35338da4785f25d63c6a81d04"
+  url "https://github.com/NomaDamas/BetterThanYou/archive/refs/tags/v0.5.1.tar.gz"
+  version "0.5.1"
+  sha256 "7f5e1bcdebfc2ec3065a1e7a0b04e38f93466d629e71a4bc99e395a9b6a8b4fc"
   license "MIT"
   head "https://github.com/NomaDamas/BetterThanYou.git", branch: "main"
 
