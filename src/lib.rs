@@ -1407,6 +1407,33 @@ fn pick_winner(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: &Scor
     if left_scores.total > right_scores.total { "left" } else { "right" }.to_string()
 }
 
+/// Make a VLM provider's error message safe to embed in user-facing prose:
+/// strip HTML tags (e.g. Cloudflare's "<html><head><title>502 Bad Gateway"
+/// pages), collapse whitespace, and cap length at 240 chars.
+fn sanitize_fallback_reason(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut in_tag = false;
+    for ch in raw.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            c if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    let collapsed: String = out
+        .split_whitespace()
+        .collect::<Vec<&str>>()
+        .join(" ");
+    if collapsed.len() > 240 {
+        let mut truncated: String = collapsed.chars().take(237).collect();
+        truncated.push('…');
+        truncated
+    } else {
+        collapsed
+    }
+}
+
 fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: ScoreBundle, right_scores: ScoreBundle, sections: BattleSections, judge_mode: JudgeMode, provider: &str, model: Option<String>, preferred_winner: Option<&str>, fallback: Option<String>) -> BattleResult {
     let axis_cards = build_axis_cards(&left_scores, &right_scores);
     let winner_id = pick_winner(left, right, &left_scores, &right_scores, &axis_cards, preferred_winner);
@@ -1422,7 +1449,11 @@ fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: Scor
     let battle_id = format!("{}-{}", Utc::now().format("%Y-%m-%dt%H-%M-%S-%3fz"), slugify(&format!("{}-{}", left.label, right.label)));
     let mut final_sections = sections;
     if let Some(fallback_reason) = fallback {
-        final_sections.model_jury_notes = format!("{} Fallback: {}", final_sections.model_jury_notes, fallback_reason);
+        let cleaned = sanitize_fallback_reason(&fallback_reason);
+        final_sections.model_jury_notes = format!(
+            "{} VLM judge unavailable — fell back to heuristic. Reason: {}",
+            final_sections.model_jury_notes, cleaned
+        );
     }
 
     BattleResult {
