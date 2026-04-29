@@ -122,14 +122,14 @@ Override weights per run with `--axis-weight KEY=WEIGHT`.
 
 English, 한국어, and 日本語 are supported. Switch language in Settings.
 
-## Public Sharing On nomadamas.org
+## Public Sharing On better-than-you.nomadamas.org
 
-`better-than-you publish` uploads reports and share assets to public free-host providers by default. When `BTYU_PUBLISH_URL` and `BTYU_PUBLISH_TOKEN` are set, or configured through Settings, uploads first go to your own Cloudflare Worker backed by KV (or R2) and return a URL such as `https://nomadamas.org/btyu/s/<id>.html`.
+`better-than-you publish` uploads reports and share assets to public free-host providers by default. When `BTYU_PUBLISH_URL` and `BTYU_PUBLISH_TOKEN` are set (or configured through Settings), uploads first go to your own Cloudflare Worker on its dedicated subdomain and return a URL such as `https://better-than-you.nomadamas.org/s/<id>.html`.
 
 ```text
-CLI ─POST /upload (Bearer)─▶ Cloudflare Worker ─▶ R2 (btyu-shares)
+CLI ─POST /share (Bearer)─▶ better-than-you.nomadamas.org (Worker) ─▶ KV
                                      │
-Browser/SNS ◀── GET /btyu/s/<id>.html ┘
+Browser/SNS ◀── GET /s/<id>.html ────┘
 ```
 
 Want your own deploy? See `infra/cloudflare/README.md`.

@@ -33,19 +33,22 @@ export default {
 
     const url = new URL(request.url);
 
-    if (request.method === "GET" && url.pathname === "/btyu/healthz") {
+    // The Worker is now hosted on its own subdomain
+    // (better-than-you.nomadamas.org), so paths are bare — no `/btyu/`
+    // prefix needed. The KV objects are still keyed `share/<id>.<ext>`.
+    if (request.method === "GET" && url.pathname === "/healthz") {
       return new Response("ok", {
         status: 200,
         headers: { ...CORS_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
       });
     }
 
-    if (request.method === "POST" && url.pathname === "/btyu/share") {
+    if (request.method === "POST" && url.pathname === "/share") {
       return uploadShare(request, env, url);
     }
 
-    if (request.method === "GET" && url.pathname.startsWith("/btyu/s/")) {
-      return getShare(env, url.pathname.slice("/btyu/s/".length));
+    if (request.method === "GET" && url.pathname.startsWith("/s/")) {
+      return getShare(env, url.pathname.slice("/s/".length));
     }
 
     return new Response("not found", {
@@ -97,7 +100,7 @@ async function uploadShare(request: Request, env: Env, url: URL): Promise<Respon
   const host = request.headers.get("host") ?? url.host;
   return jsonResponse({
     id,
-    url: `https://${host}/btyu/s/${id}.${meta.ext}`,
+    url: `https://${host}/s/${id}.${meta.ext}`,
     kind: kindParam,
   });
 }

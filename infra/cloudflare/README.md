@@ -1,8 +1,8 @@
 # BetterThanYou Cloudflare Sharing
 
-This Worker receives raw report assets from the BetterThanYou CLI, stores them in Cloudflare Workers KV (free-tier friendly, no card-on-file required), and serves stable public URLs such as `https://nomadamas.org/btyu/s/<id>.html`. The CLI tries this endpoint first when configured, then falls back to its existing free-host providers.
+This Worker receives raw report assets from the BetterThanYou CLI, stores them in Cloudflare Workers KV (free-tier friendly, no card-on-file required), and serves stable public URLs such as `https://better-than-you.nomadamas.org/s/<id>.html`. The CLI tries this endpoint first when configured, then falls back to its existing free-host providers.
 
-All routes live under the `/btyu/*` prefix to avoid Cloudflare's default WAF rules that block POSTs to common paths like `/upload`.
+The Worker lives on a dedicated subdomain (`better-than-you.nomadamas.org` by default), so paths are bare (`/share`, `/s/<id>.<ext>`, `/healthz`). Earlier revisions used `/btyu/*` paths on the apex to dodge Cloudflare's default WAF rules; moving to a subdomain side-steps that entirely and is also cleaner from a sharing perspective.
 
 ## Prerequisites
 
@@ -41,7 +41,7 @@ All routes live under the `/btyu/*` prefix to avoid Cloudflare's default WAF rul
 
 5. Edit `wrangler.toml`:
    - Set `account_id` to the Cloudflare account that owns the zone.
-   - The `routes` block is already enabled with `nomadamas.org/btyu/*`. Adjust `pattern` and `zone_name` if you use a different domain.
+   - The `routes` block is already enabled with `better-than-you.nomadamas.org` as a Worker custom domain. Adjust `pattern` and `zone_name` if you use a different subdomain or zone.
 
 6. Deploy:
 
@@ -52,7 +52,7 @@ All routes live under the `/btyu/*` prefix to avoid Cloudflare's default WAF rul
 7. Test:
 
    ```bash
-   curl https://nomadamas.org/btyu/healthz
+   curl https://better-than-you.nomadamas.org/healthz
    ```
 
    Expected response: `ok`.
@@ -62,11 +62,11 @@ All routes live under the `/btyu/*` prefix to avoid Cloudflare's default WAF rul
 Configure these values in your shell or through the BetterThanYou Settings menu entries for public sharing:
 
 ```bash
-export BTYU_PUBLISH_URL=https://nomadamas.org
+export BTYU_PUBLISH_URL=https://better-than-you.nomadamas.org
 export BTYU_PUBLISH_TOKEN=<the PUBLISH_TOKEN secret>
 ```
 
-`better-than-you publish --copy` will then upload to this Worker first and return a `nomadamas.org/btyu/s/<id>.html` URL. If the Worker upload fails, the CLI continues to its existing fallback hosts.
+`better-than-you publish --copy` will then upload to this Worker first and return a `better-than-you.nomadamas.org/s/<id>.html` URL. If the Worker upload fails, the CLI continues to its existing fallback hosts.
 
 ## Lifecycle / Cleanup
 
