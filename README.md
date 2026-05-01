@@ -1,5 +1,7 @@
 # 🦖 BetterThanYou
 
+🌐 **Read in another language:** [English](README.md) · [한국어](README.ko.md) · [中文](README.zh.md)
+
 > ⚔️ A CLI-first **face battle** tool. Pit any two faces — yourself, your friends, or even a human vs a tyrannosaurus 🦖 — and let local heuristics or AI vision models (OpenAI · Anthropic · Gemini) crown the winner.
 >
 > 🖥️ Terminal UI · 🌐 multi-provider VLM judging · ☁️ Cloudflare-backed public sharing
