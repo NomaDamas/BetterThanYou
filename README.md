@@ -1,5 +1,7 @@
 # 🦖 BetterThanYou
 
+[![Release](https://img.shields.io/github/v/release/NomaDamas/BetterThanYou?style=flat-square&color=brightgreen)](https://github.com/NomaDamas/BetterThanYou/releases) [![Stars](https://img.shields.io/github/stars/NomaDamas/BetterThanYou?style=flat-square)](https://github.com/NomaDamas/BetterThanYou/stargazers) [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](#-license) [![Rust](https://img.shields.io/badge/rust-edition%202021-orange.svg?style=flat-square)](https://www.rust-lang.org/)
+
 🌐 **Read in another language:** [English](README.md) · [한국어](README.ko.md) · [中文](README.zh.md)
 
 > ⚔️ A CLI-first **face battle** tool. Pit any two faces — yourself, your friends, or even a human vs a tyrannosaurus 🦖 — and let local heuristics or AI vision models (OpenAI · Anthropic · Gemini) crown the winner.
@@ -38,18 +40,22 @@ Requires Rust toolchain (`brew install rust`). First install takes ~2 minutes; a
 
 BetterThanYou is a CLI + TUI **face-battle arena**. Drop two images into it, and it scores each face across **10 aesthetic axes** — symmetry, bone structure, eye expression, photogenic impact, and friends — before declaring a winner with a full HTML report.
 
-Use it serious:
+### ✅ Serious uses
+
 - 🤳 Pick the better of two selfies before posting.
 - 🎨 A/B-test AI-generated portraits.
 - 👯 Settle "who's more photogenic in this photo" arguments.
 
-Use it ridiculous:
+### 🤡 Just for fun
+
 - 🦖 **Human vs Tyrannosaurus rex.** Whose jawline wins? (Spoiler: the dino crushes `BONE`.)
 - 🐕 Your dog vs your cat. The vendetta you've been avoiding.
 - 🧙 Generated wizard vs your passport photo.
 - 🐸 Frog vs influencer. We don't judge — that's the tool's job.
 
 The judge can be a **deterministic local heuristic** (no internet, no API key, sub-second) or a **vision-language model** (OpenAI · Anthropic · Gemini) for nuanced prose verdicts. Reports come out as standalone HTML and JSON, openable in your browser, your phone over LAN, or shared publicly via a Cloudflare-backed link.
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -60,6 +66,8 @@ cargo install --git https://github.com/NomaDamas/BetterThanYou
 better-than-you                          # 🎛️ launch the interactive TUI
 better-than-you you.png trex.png         # ⚔️ headless one-shot battle
 ```
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -89,6 +97,8 @@ make install        # = cargo install --path .  (no project-dir pollution)
 
 Both `cargo install` and `brew install` build in temp directories and leave no caches inside your local clone. Use `cargo build` only when you intend to iterate on the code (see [🧹 Disk Hygiene](#-disk-hygiene)).
 
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
+
 ---
 
 ## 🎮 Usage
@@ -102,6 +112,8 @@ better-than-you publish --copy                     # 🔗 publish + copy public 
 better-than-you serve --port 8080                  # 📱 serve reports to your phone over LAN
 ```
 
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
+
 ---
 
 ## 🧰 Subcommands
@@ -113,6 +125,8 @@ better-than-you serve --port 8080                  # 📱 serve reports to your 
 | `open` | 🖼️ Open the latest or specified report in your browser. |
 | `publish` | 🔗 Upload the latest or specified report and print a public URL. |
 | `serve` | 📱 Serve the reports directory over HTTP on your LAN. |
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -127,6 +141,8 @@ better-than-you serve --port 8080                  # 📱 serve reports to your 
 | 🔵 `gemini` | Google Gemini vision judging. |
 
 Set provider keys with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. The default model is `gpt-5.4-mini`; supported model lists live in [`src/lib.rs`](src/lib.rs) as `OPENAI_VLM_MODELS`, `ANTHROPIC_VLM_MODELS`, and `GEMINI_VLM_MODELS`.
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -150,6 +166,8 @@ Set provider keys with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY
 A small per-axis hash signal (deterministic from the image content) adds ~0–4 points of variation so two images with similar regional statistics don't tie. The result is a stable, fast (sub-second) baseline that runs even without internet access. For nuanced judgement (per-axis prose explanations, identity-specific commentary), use `--judge openai`, `--judge anthropic`, or `--judge gemini` with the corresponding API key.
 
 The full source lives in [`src/lib.rs`](src/lib.rs) under `score_portrait`, `compute_mirror_difference`, `region_*` helpers.
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -179,11 +197,15 @@ better-than-you human.png trex.png \
 
 You can also tune weights interactively under **Settings → Aesthetic tuning**.
 
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
+
 ---
 
 ## 🌍 Languages
 
 🇺🇸 English, 🇰🇷 한국어, and 🇯🇵 日本語 are supported. Switch language under **Settings**.
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -202,6 +224,8 @@ Want your own deploy? See [`infra/cloudflare/README.md`](infra/cloudflare/README
 - ☁️ Cloudflare free tier covers personal use comfortably.
 - 🚀 Workers includes 100k requests/day; R2 includes 10 GB storage plus free egress.
 
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
+
 ---
 
 ## ⌨️ TUI Keys
@@ -210,6 +234,8 @@ Want your own deploy? See [`infra/cloudflare/README.md`](infra/cloudflare/README
 | --- | --- |
 | `o` | 🖼️ Open report. |
 | `q` | 🚪 Quit. |
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -222,6 +248,8 @@ Each battle drops the following into your reports directory:
 - 🆕 `latest-battle.html` / `latest-battle.json` — pointers to the most recent battle
 - 🖼️ Share PNG — ready for SNS
 
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
+
 ---
 
 ## 🛠️ Development
@@ -233,6 +261,8 @@ make run            # ▶️ cargo run --release
 make clean-cache    # 🧹 reclaim disk (target/, node_modules/, old reports)
 make size           # 📏 show project disk usage
 ```
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
@@ -254,6 +284,8 @@ Rust projects accumulate build artifacts in `target/` (often 1+ GB). This repo i
   make clean          # just the build cache
   make size           # see what's eating space
   ```
+
+<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
 ---
 
