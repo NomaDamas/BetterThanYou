@@ -189,8 +189,6 @@ pub const OPENAI_VLM_MODELS: &[&str] = &[
     "gpt-5-mini",
     "gpt-5-nano",
     "gpt-5-pro",
-    "gpt-4.1",
-    "gpt-4.1-mini",
     "o3",
     "o3-pro",
 ];
@@ -219,6 +217,14 @@ pub const GEMINI_VLM_MODELS: &[&str] = &[
     "gemini-2.5-flash-lite",
 ];
 
+// Source: https://docs.x.ai/docs/models
+// xAI exposes OpenAI-compatible chat completions with vision-capable Grok models.
+pub const GROK_VLM_MODELS: &[&str] = &[
+    "grok-4.3",
+    "grok-4.3-fast",
+    "grok-4.3-mini",
+];
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum JudgeMode {
@@ -227,6 +233,7 @@ pub enum JudgeMode {
     Openai,
     Anthropic,
     Gemini,
+    Grok,
 }
 
 impl JudgeMode {
@@ -237,6 +244,7 @@ impl JudgeMode {
             Self::Openai => "openai",
             Self::Anthropic => "anthropic",
             Self::Gemini => "gemini",
+            Self::Grok => "grok",
         }
     }
 }
@@ -906,6 +914,15 @@ fn normalize_source_input(input: &str) -> String {
     if (value.starts_with('"') && value.ends_with('"')) || (value.starts_with('\'') && value.ends_with('\'')) {
         value = value[1..value.len() - 1].to_string();
     }
+    if let Some(rest) = value.strip_prefix("file://") {
+        value = rest.to_string();
+        if value.starts_with("localhost/") {
+            value = value["localhost".len()..].to_string();
+        }
+        if let Ok(decoded) = urlencoding::decode(&value) {
+            value = decoded.into_owned();
+        }
+    }
     value = value.replace("\\ ", " ");
     if value.starts_with("~/") {
         if let Some(home) = std::env::var_os("HOME") {
@@ -1456,6 +1473,7 @@ fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: Scor
                 JudgeMode::Openai => format!("openai-{}", model.clone().unwrap_or_default()),
                 JudgeMode::Anthropic => format!("anthropic-{}", model.clone().unwrap_or_default()),
                 JudgeMode::Gemini => format!("gemini-{}", model.clone().unwrap_or_default()),
+                JudgeMode::Grok => format!("grok-{}", model.clone().unwrap_or_default()),
             },
             qualitative_sections: vec!["overall_take", "strengths", "weaknesses", "why_this_won", "model_jury_notes"].into_iter().map(str::to_string).collect(),
             judge_mode: judge_mode.as_str().to_string(),
@@ -1835,6 +1853,66 @@ async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model:
     })
 }
 
+async fn judge_with_grok(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
+    let api_key = config.api_key.clone()
+        .or_else(|| std::env::var("BTY_GROK_API_KEY").ok())
+        .or_else(|| std::env::var("GROK_API_KEY").ok())
+        .or_else(|| std::env::var("XAI_API_KEY").ok())
+        .ok_or_else(|| anyhow!("Grok judging requires XAI_API_KEY, GROK_API_KEY, or BTY_GROK_API_KEY"))?;
+    let base_url = std::env::var("XAI_BASE_URL")
+        .or_else(|_| std::env::var("GROK_BASE_URL"))
+        .unwrap_or_else(|_| "https://api.x.ai/v1".to_string());
+
+    let prompt = vlm_json_prompt(lang);
+    let body = json!({
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": left.image_data_url}},
+                {"type": "image_url", "image_url": {"url": right.image_data_url}}
+            ]
+        }],
+        "response_format": {"type": "json_object"}
+    });
+
+    let client = Client::new();
+    let response = client
+        .post(format!("{}/chat/completions", base_url.trim_end_matches('/')))
+        .bearer_auth(api_key)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        bail!("Grok judge failed: HTTP {} {}", response.status(), response.text().await.unwrap_or_default());
+    }
+
+    let payload: Value = response.json().await?;
+    let output_text = payload
+        .get("choices")
+        .and_then(Value::as_array)
+        .and_then(|arr| arr.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Grok judge returned no output text"))?;
+
+    let parsed: Value = serde_json::from_str(output_text)
+        .with_context(|| format!("Failed to parse Grok JSON response: {}", &output_text[..output_text.len().min(200)]))?;
+
+    Ok(OpenAiJudgeOutput {
+        winner_id: parsed.get("winner_id").and_then(Value::as_str).unwrap_or("left").to_string(),
+        left_scores: parse_vlm_axes(&parsed, "left_scores"),
+        right_scores: parse_vlm_axes(&parsed, "right_scores"),
+        sections: parse_vlm_sections(&parsed)?,
+        provider: "grok".to_string(),
+        model: model.to_string(),
+    })
+}
+
 pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, openai_override: Option<OpenAiJudgeOutput>) -> Result<BattleResult> {
     let axis_definitions = axis_definitions_with_overrides(&options.axis_weights)?;
     let left = load_portrait(&options.left_source, options.left_label.as_deref(), "left").await?;
@@ -1853,15 +1931,18 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
     let openai_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok()).or_else(|| std::env::var("OPENAI_API_KEY").ok()).is_some();
     let anthropic_key_present = std::env::var("BTY_ANTHROPIC_API_KEY").is_ok() || std::env::var("ANTHROPIC_API_KEY").is_ok();
     let gemini_key_present = std::env::var("BTY_GEMINI_API_KEY").is_ok() || std::env::var("GEMINI_API_KEY").is_ok();
+    let grok_key_present = std::env::var("BTY_GROK_API_KEY").is_ok() || std::env::var("GROK_API_KEY").is_ok() || std::env::var("XAI_API_KEY").is_ok();
 
     let vlm_mode = match options.judge_mode {
         JudgeMode::Openai => Some(JudgeMode::Openai),
         JudgeMode::Anthropic => Some(JudgeMode::Anthropic),
         JudgeMode::Gemini => Some(JudgeMode::Gemini),
+        JudgeMode::Grok => Some(JudgeMode::Grok),
         JudgeMode::Auto => {
             if openai_key_present { Some(JudgeMode::Openai) }
             else if anthropic_key_present { Some(JudgeMode::Anthropic) }
             else if gemini_key_present { Some(JudgeMode::Gemini) }
+            else if grok_key_present { Some(JudgeMode::Grok) }
             else { None }
         }
         JudgeMode::Heuristic => None,
@@ -1888,6 +1969,9 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
             }
             JudgeMode::Gemini => {
                 judge_with_gemini(&left, &right, &options.openai_model, &options.openai_config, lang).await
+            }
+            JudgeMode::Grok => {
+                judge_with_grok(&left, &right, &options.openai_model, &options.openai_config, lang).await
             }
             _ => unreachable!(),
         };
@@ -3819,6 +3903,21 @@ async fn publish_bytes_to_web(bytes: &[u8], filename: &str, mime: &str) -> Resul
     )
 }
 
+async fn publish_bytes_to_nomadamas(
+    client: &Client,
+    base_url: &str,
+    token: &str,
+    bytes: &[u8],
+    filename: &str,
+    mime: &str,
+) -> Result<PublishedAsset> {
+    let url = try_nomadamas_share(client, base_url, token, bytes, filename, mime).await?;
+    Ok(PublishedAsset {
+        url,
+        provider: "nomadamas.org".to_string(),
+    })
+}
+
 /// Upload an HTML file to a free temporary file host and return the public URL.
 /// Tries multiple hosts in order and returns the first that succeeds.
 pub async fn publish_html_to_web(html_path: &Path) -> Result<PublishedReport> {
@@ -3857,18 +3956,74 @@ pub async fn publish_share_bundle_to_web(
         .and_then(|value| value.to_str())
         .unwrap_or("share-preview.png")
         .to_string();
-    let published_preview = publish_bytes_to_web(&preview_bytes, &preview_name, "image/png").await?;
-    let published_report = publish_html_to_web(html_path).await?;
+
+    let html_bytes = fs::read(html_path)
+        .with_context(|| format!("failed to read {}", html_path.display()))?;
+    let html_name = html_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("battle.html")
+        .to_string();
+
+    let (published_preview, published_report, published_page) = if let Some((base_url, token)) = nomadamas_publish_config() {
+        let client = Client::new();
+        let published_preview = publish_bytes_to_nomadamas(
+            &client,
+            &base_url,
+            &token,
+            &preview_bytes,
+            &preview_name,
+            "image/png",
+        )
+        .await?;
+        let published_report_asset = publish_bytes_to_nomadamas(
+            &client,
+            &base_url,
+            &token,
+            &html_bytes,
+            &html_name,
+            "text/html",
+        )
+        .await?;
+        let published_report = PublishedReport {
+            qr_ascii: qr_ascii(&published_report_asset.url),
+            url: published_report_asset.url,
+            provider: published_report_asset.provider,
+        };
+        let caption = share_caption(result, "x");
+        let share_page_html = render_public_share_page(
+            result,
+            &caption,
+            &published_preview.url,
+            &published_report.url,
+        );
+        let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
+        let published_page = publish_bytes_to_nomadamas(
+            &client,
+            &base_url,
+            &token,
+            share_page_html.as_bytes(),
+            &share_page_name,
+            "text/html",
+        )
+        .await?;
+        (published_preview, published_report, published_page)
+    } else {
+        let published_preview = publish_bytes_to_web(&preview_bytes, &preview_name, "image/png").await?;
+        let published_report = publish_html_to_web(html_path).await?;
+        let caption = share_caption(result, "x");
+        let share_page_html = render_public_share_page(
+            result,
+            &caption,
+            &published_preview.url,
+            &published_report.url,
+        );
+        let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
+        let published_page = publish_bytes_to_web(share_page_html.as_bytes(), &share_page_name, "text/html").await?;
+        (published_preview, published_report, published_page)
+    };
 
     let caption = share_caption(result, "x");
-    let share_page_html = render_public_share_page(
-        result,
-        &caption,
-        &published_preview.url,
-        &published_report.url,
-    );
-    let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
-    let published_page = publish_bytes_to_web(share_page_html.as_bytes(), &share_page_name, "text/html").await?;
     let social_links = build_social_share_links(&published_page.url, &published_preview.url, &caption);
 
     Ok(PublishedShareBundle {
@@ -3992,6 +4147,18 @@ mod tests {
             *pixel = if in_face { Rgba(accent) } else if in_hair || in_shoulders { Rgba(color) } else { Rgba([16, 18, 24, 255]) };
         }
         image.save(path).unwrap();
+    }
+
+    #[test]
+    fn normalize_source_input_accepts_file_urls_from_terminal_drop() {
+        assert_eq!(
+            normalize_source_input("file:///Users/jinminseong/Desktop/My%20Photo.png"),
+            "/Users/jinminseong/Desktop/My Photo.png"
+        );
+        assert_eq!(
+            normalize_source_input("\"file://localhost/Users/jinminseong/Desktop/A%20B.jpg\""),
+            "/Users/jinminseong/Desktop/A B.jpg"
+        );
     }
 
     #[tokio::test]

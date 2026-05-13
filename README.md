@@ -4,9 +4,9 @@
 
 🌐 **Read in another language:** [English](README.md) · [한국어](README.ko.md) · [中文](README.zh.md)
 
-> ⚔️ A CLI-first **face battle** tool. Pit any two faces — yourself, your friends, or even a human vs a tyrannosaurus 🦖 — and let local heuristics or AI vision models (OpenAI · Anthropic · Gemini) crown the winner.
+> ⚔️ A CLI-first **face battle** tool. Pit any two faces — yourself, your friends, or even a human vs a tyrannosaurus 🦖 — and let local heuristics or AI vision models (OpenAI · Anthropic · Gemini · Grok) crown the winner.
 >
-> 🖥️ Terminal UI · 🌐 multi-provider VLM judging · ☁️ Cloudflare-backed public sharing
+> 🖥️ Terminal UI · 🌐 multi-provider VLM judging
 
 ```bash
 cargo install --git https://github.com/NomaDamas/BetterThanYou && better-than-you
@@ -27,7 +27,6 @@ Requires Rust toolchain (`brew install rust`). First install takes ~2 minutes; a
 - [🧪 How the Heuristic Judge Works](#-how-the-heuristic-judge-works)
 - [🎯 Scoring Axes](#-scoring-axes)
 - [🌍 Languages](#-languages)
-- [🔗 Public Sharing](#-public-sharing)
 - [⌨️ TUI Keys](#-tui-keys)
 - [📁 Outputs](#-outputs)
 - [🛠️ Development](#-development)
@@ -53,7 +52,7 @@ BetterThanYou is a CLI + TUI **face-battle arena**. Drop two images into it, and
 - 🧙 Generated wizard vs your passport photo.
 - 🐸 Frog vs influencer. We don't judge — that's the tool's job.
 
-The judge can be a **deterministic local heuristic** (no internet, no API key, sub-second) or a **vision-language model** (OpenAI · Anthropic · Gemini) for nuanced prose verdicts. Reports come out as standalone HTML and JSON, openable in your browser, your phone over LAN, or shared publicly via a Cloudflare-backed link.
+The judge can be a **deterministic local heuristic** (no internet, no API key, sub-second) or a **vision-language model** (OpenAI · Anthropic · Gemini · Grok) for nuanced prose verdicts. Reports come out as standalone HTML and JSON, openable in your browser or your phone over LAN.
 
 <div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
@@ -108,7 +107,6 @@ better-than-you                                    # 🎛️ interactive TUI
 better-than-you human.png trex.png --judge auto    # ⚔️ one-shot battle
 better-than-you battle left.png right.png --judge anthropic
 better-than-you open                               # 🖼️ open latest report in your browser
-better-than-you publish --copy                     # 🔗 publish + copy public URL
 better-than-you serve --port 8080                  # 📱 serve reports to your phone over LAN
 ```
 
@@ -123,7 +121,6 @@ better-than-you serve --port 8080                  # 📱 serve reports to your 
 | `battle` | ⚔️ Run a single face battle and write reports. |
 | `report` | 🔄 Re-render an HTML report from saved battle JSON. |
 | `open` | 🖼️ Open the latest or specified report in your browser. |
-| `publish` | 🔗 Upload the latest or specified report and print a public URL. |
 | `serve` | 📱 Serve the reports directory over HTTP on your LAN. |
 
 <div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
@@ -139,8 +136,9 @@ better-than-you serve --port 8080                  # 📱 serve reports to your 
 | 🟢 `openai` | OpenAI vision judging. |
 | 🟣 `anthropic` | Anthropic Claude vision judging. |
 | 🔵 `gemini` | Google Gemini vision judging. |
+| ⚫ `grok` | xAI Grok vision judging. |
 
-Set provider keys with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`. The default model is `gpt-5.4-mini`; supported model lists live in [`src/lib.rs`](src/lib.rs) as `OPENAI_VLM_MODELS`, `ANTHROPIC_VLM_MODELS`, and `GEMINI_VLM_MODELS`.
+Set provider keys with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `XAI_API_KEY`. The default model is `gpt-5.4-mini`; supported model lists live in [`src/lib.rs`](src/lib.rs) as `OPENAI_VLM_MODELS`, `ANTHROPIC_VLM_MODELS`, `GEMINI_VLM_MODELS`, and `GROK_VLM_MODELS`.
 
 <div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 
@@ -163,7 +161,7 @@ Set provider keys with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY
 | 🖼️ **Background & Framing** | Center mass strength + background calmness (low outer variance) + edge strength. |
 | 💥 **Photogenic Impact** | Composite of center presence + palette mood + dynamic range + symmetry. |
 
-A small per-axis hash signal (deterministic from the image content) adds ~0–4 points of variation so two images with similar regional statistics don't tie. The result is a stable, fast (sub-second) baseline that runs even without internet access. For nuanced judgement (per-axis prose explanations, identity-specific commentary), use `--judge openai`, `--judge anthropic`, or `--judge gemini` with the corresponding API key.
+A small per-axis hash signal (deterministic from the image content) adds ~0–4 points of variation so two images with similar regional statistics don't tie. The result is a stable, fast (sub-second) baseline that runs even without internet access. For nuanced judgement (per-axis prose explanations, identity-specific commentary), use `--judge openai`, `--judge anthropic`, `--judge gemini`, or `--judge grok` with the corresponding API key.
 
 The full source lives in [`src/lib.rs`](src/lib.rs) under `score_portrait`, `compute_mirror_difference`, `region_*` helpers.
 
@@ -209,31 +207,31 @@ You can also tune weights interactively under **Settings → Aesthetic tuning**.
 
 ---
 
-## 🔗 Public Sharing
-
-`better-than-you publish` uploads reports and share assets to public free-host providers by default. When `BTYU_PUBLISH_URL` and `BTYU_PUBLISH_TOKEN` are set (or configured through Settings), uploads first go to your own Cloudflare Worker on its dedicated subdomain and return a URL such as `https://better-than-you.nomadamas.org/s/<id>.html`.
-
-```text
-CLI ─POST /share (Bearer)─▶ better-than-you.nomadamas.org (Worker) ─▶ KV
-                                     │
-Browser/SNS ◀── GET /s/<id>.html ────┘
-```
-
-Want your own deploy? See [`infra/cloudflare/README.md`](infra/cloudflare/README.md).
-
-- ☁️ Cloudflare free tier covers personal use comfortably.
-- 🚀 Workers includes 100k requests/day; R2 includes 10 GB storage plus free egress.
-
-<div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
-
----
-
 ## ⌨️ TUI Keys
 
 | Key | Action |
 | --- | --- |
 | `o` | 🖼️ Open report. |
 | `q` | 🚪 Quit. |
+
+### cmux drag/drop bridge
+
+iTerm turns Finder drops into pasted file paths automatically. cmux may not
+forward Finder drag-and-drop to the terminal pty the same way, so BetterThanYou
+enables a runtime clipboard bridge while the battle input screen is open. In a
+cmux terminal, copy an image file/path and the empty active side auto-fills; the
+bridge stops when you leave the input screen.
+
+BetterThanYou also ships a manual bridge script:
+
+```bash
+scripts/better-than-you-cmux-drop ./left.jpg ./right.jpg
+```
+
+The bridge sends the first path to the focused cmux surface, presses `Tab`, then
+sends the second path. Use it from a macOS Quick Action/Droplet if you want a
+Finder-driven workflow in cmux. Native “drop directly onto the terminal pane”
+still requires cmux itself to translate dropped files into terminal paste input.
 
 <div align="right"><a href="#-table-of-contents">⬆ back to top</a></div>
 

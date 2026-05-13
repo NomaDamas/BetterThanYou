@@ -1,9 +1,10 @@
 use std::io::{self, Stdout};
 use std::path::Path;
+use std::process::Command;
 use std::time::Duration;
 
 use anyhow::Result;
-use better_than_you::{localized_axis_short, BattleResult, Language, SavedArtifacts};
+use better_than_you::{localized_axis_short, read_clipboard_text, BattleResult, Language, SavedArtifacts};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{cursor, execute};
@@ -794,16 +795,144 @@ pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Re
 }
 
 fn clean_path(input: &str) -> String {
-    let s = input.trim()
+    let mut s = input.trim()
         .trim_matches('\'')
         .trim_matches('"')
-        .trim();
+        .trim()
+        .to_string();
+
+    if let Some(rest) = s.strip_prefix("file://") {
+        s = rest.to_string();
+        if s.starts_with("localhost/") {
+            s = s["localhost".len()..].to_string();
+        }
+        if let Ok(decoded) = urlencoding::decode(&s) {
+            s = decoded.into_owned();
+        }
+    }
+
     // macOS drag-and-drop escapes spaces with backslash: /path/to/my\ file.jpg
     s.replace("\\ ", " ")
         .replace("\\(", "(")
         .replace("\\)", ")")
         .replace("\\[", "[")
         .replace("\\]", "]")
+        .replace("\\{", "{")
+        .replace("\\}", "}")
+        .replace("\\'", "'")
+        .replace("\\\"", "\"")
+}
+
+fn is_cmux_session() -> bool {
+    std::env::var_os("CMUX_WORKSPACE_ID").is_some()
+        || std::env::var_os("CMUX_SURFACE_ID").is_some()
+        || std::env::var_os("CMUX_SOCKET_PATH").is_some()
+}
+
+fn looks_like_portrait_source(input: &str) -> bool {
+    let trimmed = input.trim();
+    if trimmed.starts_with("http://")
+        || trimmed.starts_with("https://")
+        || trimmed.starts_with("data:image/")
+    {
+        return true;
+    }
+
+    let cleaned = clean_path(trimmed);
+    if cleaned.is_empty() {
+        return false;
+    }
+
+    let path = Path::new(&cleaned);
+    if !path.exists() {
+        return false;
+    }
+
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn read_macos_file_clipboard() -> Option<String> {
+    if cfg!(not(target_os = "macos")) {
+        return None;
+    }
+
+    let output = Command::new("osascript")
+        .args([
+            "-e",
+            "try",
+            "-e",
+            "POSIX path of (the clipboard as \u{00AB}class furl\u{00BB})",
+            "-e",
+            "on error",
+            "-e",
+            "return \"\"",
+            "-e",
+            "end try",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn read_cmux_clipboard_source() -> Option<String> {
+    let text_value = read_clipboard_text()
+        .ok()
+        .map(|value| value.replace('\n', "").replace('\r', "").trim().to_string())
+        .filter(|value| !value.is_empty() && looks_like_portrait_source(value));
+
+    text_value.or_else(|| {
+        read_macos_file_clipboard()
+            .map(|value| value.replace('\n', "").replace('\r', "").trim().to_string())
+            .filter(|value| !value.is_empty() && looks_like_portrait_source(value))
+    })
+}
+
+fn try_apply_cmux_clipboard_source(
+    left_input: &mut String,
+    right_input: &mut String,
+    active_side: &mut usize,
+    last_clipboard_source: &mut String,
+) {
+    let Some(candidate) = read_cmux_clipboard_source() else {
+        return;
+    };
+    if candidate.is_empty() || candidate == *last_clipboard_source {
+        return;
+    }
+    *last_clipboard_source = candidate.clone();
+
+    let cleaned = clean_path(&candidate);
+    if *active_side == 0 {
+        if left_input.trim().is_empty() {
+            *left_input = cleaned;
+            *active_side = 1;
+        } else if right_input.trim().is_empty() {
+            *right_input = cleaned;
+        }
+    } else if right_input.trim().is_empty() {
+        *right_input = cleaned;
+        *active_side = 0;
+    } else if left_input.trim().is_empty() {
+        *left_input = cleaned;
+    }
 }
 
 fn try_load_preview(path: &str, picker: &Picker) -> Option<StatefulProtocol> {
@@ -819,7 +948,14 @@ fn try_load_preview(path: &str, picker: &Picker) -> Option<StatefulProtocol> {
 
 pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&str>) -> Result<Option<(String, String)>> {
     // Detect terminal image protocol BEFORE entering alternate screen
-    let mut picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+    let mut picker = (0..3)
+        .find_map(|attempt| {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(80));
+            }
+            Picker::from_query_stdio().ok()
+        })
+        .unwrap_or_else(Picker::halfblocks);
 
     let mut session = TuiSession::new()?;
     let mut left_input = existing_left.unwrap_or("").to_string();
@@ -829,6 +965,12 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
     let mut right_preview: Option<StatefulProtocol> = None;
     let mut left_prev_path = String::new();
     let mut right_prev_path = String::new();
+    let cmux_clipboard_bridge = is_cmux_session();
+    let mut last_clipboard_source = if cmux_clipboard_bridge {
+        read_clipboard_text().unwrap_or_default().trim().to_string()
+    } else {
+        String::new()
+    };
 
     // Drain buffered events
     while event::poll(Duration::from_millis(1))? {
@@ -856,14 +998,14 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(4),   // title
+                    Constraint::Length(if cmux_clipboard_bridge { 5 } else { 4 }),   // title
                     Constraint::Min(10),     // split panels
                     Constraint::Length(3),   // hotkeys
                 ])
                 .split(area);
 
             // Title
-            let title = Paragraph::new(vec![
+            let mut title_lines = vec![
                 Line::from(Span::styled(
                     "\u{2694}  BATTLE SETUP  \u{2694}",
                     Style::default().fg(NEON_MAGENTA).add_modifier(Modifier::BOLD),
@@ -872,7 +1014,14 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     "Paste or drag portrait file paths into each side",
                     Style::default().fg(LIGHT_TEXT),
                 )),
-            ])
+            ];
+            if cmux_clipboard_bridge {
+                title_lines.push(Line::from(Span::styled(
+                    "cmux bridge: copy an image file/path to auto-fill this screen",
+                    Style::default().fg(NEON_CYAN),
+                )));
+            }
+            let title = Paragraph::new(title_lines)
             .alignment(Alignment::Center)
             .block(game_block_double("PORTRAIT INPUT", NEON_MAGENTA));
             frame.render_widget(title, layout[0]);
@@ -981,8 +1130,28 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
             frame.render_widget(footer, layout[2]);
         })?;
 
-        match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => {
+        let next_event = if cmux_clipboard_bridge {
+            if event::poll(Duration::from_millis(250))? {
+                Some(event::read()?)
+            } else {
+                None
+            }
+        } else {
+            Some(event::read()?)
+        };
+
+        if next_event.is_none() && cmux_clipboard_bridge {
+            try_apply_cmux_clipboard_source(
+                &mut left_input,
+                &mut right_input,
+                &mut active_side,
+                &mut last_clipboard_source,
+            );
+            continue;
+        }
+
+        match next_event {
+            Some(Event::Key(key)) if key.kind == KeyEventKind::Press => {
                 match key.code {
                     KeyCode::Tab | KeyCode::BackTab => {
                         active_side = 1 - active_side;
@@ -1007,7 +1176,7 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                 }
             }
             // Handle paste events (multi-char, e.g. drag-and-drop paths)
-            Event::Paste(text) => {
+            Some(Event::Paste(text)) => {
                 let cleaned = text.replace('\n', "").replace('\r', "").trim().to_string();
                 // If paste looks like a file path or URL, replace instead of append
                 let is_path = cleaned.starts_with('/')

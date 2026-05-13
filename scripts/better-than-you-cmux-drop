@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  better-than-you-cmux-drop <image-path> [second-image-path]
+
+Sends one or two image paths to the focused cmux terminal surface.
+With two paths, the script sends the first path, presses Tab, then sends
+the second path, matching BetterThanYou's LEFT/RIGHT battle input screen.
+
+This is a cmux bridge for environments where Finder drag-and-drop does not
+paste file paths into the terminal like iTerm does.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if ! command -v cmux >/dev/null 2>&1; then
+  echo "better-than-you-cmux-drop: cmux CLI not found in PATH" >&2
+  exit 127
+fi
+
+if [[ "$#" -lt 1 || "$#" -gt 2 ]]; then
+  usage >&2
+  exit 2
+fi
+
+normalize_path() {
+  local path="$1"
+  if [[ "$path" == file://* ]]; then
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.urlparse(sys.argv[1]).path)' "$path"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
+send_path() {
+  local path
+  path="$(normalize_path "$1")"
+  if [[ ! -e "$path" ]]; then
+    echo "better-than-you-cmux-drop: file not found: $path" >&2
+    exit 1
+  fi
+  cmux send "$path"
+}
+
+send_path "$1"
+
+if [[ "$#" -eq 2 ]]; then
+  cmux send-key Tab
+  send_path "$2"
+fi
