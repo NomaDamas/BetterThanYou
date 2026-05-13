@@ -14,7 +14,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Terminal;
-use ratatui_image::picker::Picker;
+use ratatui_image::picker::{Picker, ProtocolType};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
 use base64::Engine as _;
@@ -52,6 +52,28 @@ fn battle_view_photo_height(area_height: u16, stat_height: u16, dual_height: u16
 
 struct TerminalPreview {
     image: DynamicImage,
+    protocol: Option<StatefulProtocol>,
+}
+
+fn should_force_ghostty_kitty() -> bool {
+    std::env::var("TERM_PROGRAM")
+        .map(|value| value.to_ascii_lowercase().contains("ghostty"))
+        .unwrap_or(false)
+}
+
+fn detect_rich_preview_picker() -> Option<Picker> {
+    let mut picker = (0..3).find_map(|attempt| {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(80));
+        }
+        Picker::from_query_stdio().ok()
+    })?;
+
+    if picker.protocol_type() == ProtocolType::Halfblocks && should_force_ghostty_kitty() {
+        picker.set_protocol_type(ProtocolType::Kitty);
+    }
+
+    (picker.protocol_type() != ProtocolType::Halfblocks).then_some(picker)
 }
 
 fn load_preview_image(path: &Path) -> Result<DynamicImage, String> {
@@ -1067,17 +1089,19 @@ fn try_apply_cmux_clipboard_source(
     }
 }
 
-fn try_load_preview(path: &str) -> Result<Option<TerminalPreview>, String> {
+fn try_load_preview(path: &str, rich_picker: Option<&Picker>) -> Result<Option<TerminalPreview>, String> {
     let cleaned = clean_path(path);
     if cleaned.is_empty() { return Ok(None); }
     let p = std::path::Path::new(&cleaned);
     if !p.exists() { return Ok(None); }
     let image = load_preview_image(p)?;
-    Ok(Some(TerminalPreview { image }))
+    let protocol = rich_picker.map(|picker| picker.new_resize_protocol(image.clone()));
+    Ok(Some(TerminalPreview { image, protocol }))
 }
 
 pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&str>) -> Result<Option<(String, String)>> {
     let mut session = TuiSession::new()?;
+    let rich_preview_picker = detect_rich_preview_picker();
     let mut left_input = existing_left.unwrap_or("").to_string();
     let mut right_input = existing_right.unwrap_or("").to_string();
     let mut active_side: usize = 0;
@@ -1099,7 +1123,7 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
         // Reload previews when path changes
         let left_cleaned = clean_path(&left_input);
         if left_cleaned != left_prev_path {
-            match try_load_preview(&left_input) {
+            match try_load_preview(&left_input, rich_preview_picker.as_ref()) {
                 Ok(preview) => {
                     left_preview = preview;
                     left_preview_error = None;
@@ -1113,7 +1137,7 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
         }
         let right_cleaned = clean_path(&right_input);
         if right_cleaned != right_prev_path {
-            match try_load_preview(&right_input) {
+            match try_load_preview(&right_input, rich_preview_picker.as_ref()) {
                 Ok(preview) => {
                     right_preview = preview;
                     right_preview_error = None;
@@ -1192,10 +1216,15 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     .split(inner);
 
                 // Image preview area
-                let preview = if is_left { &left_preview } else { &right_preview };
+                let preview = if is_left { &mut left_preview } else { &mut right_preview };
                 let preview_error = if is_left { &left_preview_error } else { &right_preview_error };
-                if let Some(preview) = preview.as_ref() {
-                    render_terminal_preview(frame, inner_layout[0], preview);
+                if let Some(preview) = preview.as_mut() {
+                    if let Some(protocol) = preview.protocol.as_mut() {
+                        let img_widget = StatefulImage::new();
+                        frame.render_stateful_widget(img_widget, inner_layout[0], protocol);
+                    } else {
+                        render_terminal_preview(frame, inner_layout[0], preview);
+                    }
                 } else {
                     let cleaned = clean_path(input);
                     let file_exists = !cleaned.is_empty() && Path::new(&cleaned).exists();
