@@ -2,7 +2,7 @@ mod ui;
 
 use std::fs;
 use std::io::{self, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -235,6 +235,51 @@ fn save_app_state(state: &AppState) -> Result<()> {
     Ok(())
 }
 
+fn remove_file_if_exists(path: &Path) {
+    if path.exists() {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn cleanup_runtime_resources(skip_update_temp: bool) {
+    let tmp = std::env::temp_dir();
+
+    // This app owns these paths. Do not clean arbitrary Cargo target dirs here:
+    // users may run BetterThanYou from inside unrelated Rust projects.
+    if !skip_update_temp {
+        let _ = fs::remove_dir_all(tmp.join("btyu-update"));
+    }
+
+    if let Ok(entries) = fs::read_dir(&tmp) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if name.starts_with("btyu-preview-") && name.ends_with(".png") {
+                remove_file_if_exists(&path);
+            }
+        }
+    }
+
+    let update_log = tmp.join("btyu-update.log");
+    let stale_or_large = fs::metadata(&update_log)
+        .ok()
+        .map(|meta| {
+            let old = meta
+                .modified()
+                .ok()
+                .and_then(|modified| modified.elapsed().ok())
+                .map(|age| age.as_secs() > 24 * 60 * 60)
+                .unwrap_or(false);
+            old || meta.len() > 2 * 1024 * 1024
+        })
+        .unwrap_or(false);
+    if stale_or_large {
+        remove_file_if_exists(&update_log);
+    }
+}
+
 /// Check whether `cargo` is reachable so we can drive a self-install. Without
 /// it we can only notify the user about a new release.
 fn cargo_available() -> bool {
@@ -303,6 +348,7 @@ async fn auto_update_check(skip: bool) {
         "--force",
         "--quiet",
     ]);
+    cmd.env("CARGO_TARGET_DIR", temp_root.join("target"));
     if let Some(f) = log_file {
         cmd.stdout(std::process::Stdio::from(f));
     } else {
@@ -363,6 +409,7 @@ async fn auto_update_check(skip: bool) {
                 }
             }
         }
+        let _ = std::fs::remove_dir_all(&temp_root);
         return;
     }
 
@@ -420,6 +467,7 @@ async fn auto_update_check(skip: bool) {
         latest,
         log_path.display()
     );
+    let _ = std::fs::remove_dir_all(&temp_root);
 
     #[cfg(unix)]
     {
@@ -1279,6 +1327,7 @@ async fn main() -> Result<()> {
     // Auto-update check FIRST, before any other startup work. We skip during
     // `serve` (would interrupt anyone browsing) and when the user opted out.
     let skip_update = cli.no_update || matches!(cli.command, Some(Commands::Serve(_)));
+    cleanup_runtime_resources(skip_update);
     auto_update_check(skip_update).await;
 
     let app_state = load_app_state();

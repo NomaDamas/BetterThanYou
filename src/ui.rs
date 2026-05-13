@@ -1583,7 +1583,7 @@ fn face_bounce(frame: u64, side: bool) -> i16 {
     }
 }
 
-/// Returns `true` if the user pressed 's' to star on GitHub.
+/// Returns `true` when the user chooses the GitHub-star path.
 pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
     let mut session = TuiSession::new()?;
     let mut frame: u64 = 0;
@@ -1733,7 +1733,7 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                     Line::from(vec![
                         Span::styled("\u{2B50}  ", Style::default().fg(star_pulse)),
                         Span::styled(
-                            "Will you give us a star on GitHub?  It powers up the dev!",
+                            "Give BetterThanYou a GitHub star?  It powers up the dev.",
                             Style::default().fg(star_pulse).add_modifier(Modifier::BOLD),
                         ),
                         Span::styled("  \u{2B50}", Style::default().fg(star_pulse)),
@@ -1741,11 +1741,11 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                     Line::from(""),
                     Line::from(vec![
                         Span::styled(
-                            " [Y/Enter] ",
+                            " [Y / YES / Enter] ",
                             Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
-                            "Yes — open GitHub to star",
+                            "Open GitHub and remember",
                             Style::default().fg(DIM_TEXT),
                         ),
                         Span::styled("    ", Style::default()),
@@ -1754,7 +1754,7 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                             Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
-                            "No — keep asking",
+                            "No — ask again next launch",
                             Style::default().fg(DIM_TEXT),
                         ),
                     ]),
@@ -1818,9 +1818,9 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                         // Already a star supporter — any keypress advances.
                         return Ok(false);
                     }
-                    // Pre-acknowledgement: Y / Yes / Enter / Space / S all
-                    // count as yes (open GitHub + remember). N rejects.
-                    // Any other key is ignored so the modal stays up.
+                    // Pre-acknowledgement: typing "yes" starts with Y, so the
+                    // first key is enough. N intentionally does not persist,
+                    // causing this pre-start page to return next launch.
                     match key.code {
                         KeyCode::Char('y') | KeyCode::Char('Y')
                         | KeyCode::Char('s') | KeyCode::Char('S')
