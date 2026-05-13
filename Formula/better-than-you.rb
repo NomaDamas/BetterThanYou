@@ -1,16 +1,16 @@
 class BetterThanYou < Formula
   desc "CLI-first portrait battle tool for fictional AI-generated adult portraits"
   homepage "https://github.com/NomaDamas/BetterThanYou"
-  version "0.8.17"
+  version "0.8.18"
   license "MIT"
   head "https://github.com/NomaDamas/BetterThanYou.git", branch: "main"
 
   if OS.mac? && Hardware::CPU.arm?
-    url "https://github.com/NomaDamas/BetterThanYou/releases/download/v0.8.17/better-than-you-v0.8.17-aarch64-apple-darwin.tar.gz"
-    sha256 "6ca2995df044a46f2def76ebeb825115fe27948a3e0255b3766547a992c04e36"
+    url "https://github.com/NomaDamas/BetterThanYou/releases/download/v0.8.18/better-than-you-v0.8.18-aarch64-apple-darwin.tar.gz"
+    sha256 "aa20022c2c562c2730f1763f979405478efd5883ae80159ef847cb9be78b0f4e"
   else
-    url "https://github.com/NomaDamas/BetterThanYou/archive/refs/tags/v0.8.17.tar.gz"
-    sha256 "bda9289cbea026391267a9e2d32af350c52ffa4629b7f38a16cf0b809eb4b74f"
+    url "https://github.com/NomaDamas/BetterThanYou/archive/refs/tags/v0.8.18.tar.gz"
+    sha256 "0bff27a6a73e08c9b8255e8f7b8832a4da23013aaed55766c884251512e1cec9"
 
     depends_on "rust" => :build
   end
