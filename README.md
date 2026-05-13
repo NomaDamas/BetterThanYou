@@ -1,3 +1,6 @@
+<img width="2172" height="724" alt="github banner" src="https://github.com/user-attachments/assets/e47b565b-9db5-47a5-b317-dbd6fedf4a38" />
+
+
 # 🦖 BetterThanYou
 
 [![Release](https://img.shields.io/github/v/release/NomaDamas/BetterThanYou?style=flat-square&color=brightgreen)](https://github.com/NomaDamas/BetterThanYou/releases) [![Stars](https://img.shields.io/github/stars/NomaDamas/BetterThanYou?style=flat-square)](https://github.com/NomaDamas/BetterThanYou/stargazers) [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](#-license) [![Rust](https://img.shields.io/badge/rust-edition%202021-orange.svg?style=flat-square)](https://www.rust-lang.org/)
