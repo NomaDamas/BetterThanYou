@@ -16,7 +16,7 @@ cargo install --git https://github.com/NomaDamas/BetterThanYou && better-than-yo
 
 Requires Rust toolchain (`brew install rust`). First install takes ~2 minutes; afterwards just run `better-than-you`.
 
-https://github.com/NomaDamas/BetterThanYou/issues/2#issue-4440509825
+[https://github.com/NomaDamas/BetterThanYou/issues/2#issue-4440509825](https://github.com/user-attachments/assets/ee8fecea-d482-48ba-96ec-1b1b8d3b83d3)
 
 
 ---
