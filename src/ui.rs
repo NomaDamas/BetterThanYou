@@ -18,6 +18,7 @@ use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
 use base64::Engine as _;
+use image::{DynamicImage, GenericImageView, RgbaImage};
 
 fn try_load_preview_from_data_url(data_url: &str, picker: &mut Picker) -> Option<StatefulProtocol> {
     let (_, encoded) = data_url.split_once(',')?;
@@ -47,6 +48,106 @@ fn battle_view_photo_height(area_height: u16, stat_height: u16, dual_height: u16
     } else {
         0
     }
+}
+
+struct TerminalPreview {
+    image: DynamicImage,
+}
+
+fn load_preview_image(path: &Path) -> Result<DynamicImage, String> {
+    match image::open(path) {
+        Ok(img) => Ok(img),
+        Err(err) => load_preview_image_with_sips(path).ok_or_else(|| format!("decode failed: {err}")),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn load_preview_image_with_sips(path: &Path) -> Option<DynamicImage> {
+    let out_path = std::env::temp_dir().join(format!(
+        "btyu-preview-{}-{}.png",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    let output = Command::new("sips")
+        .args(["-s", "format", "png", "--out"])
+        .arg(&out_path)
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let img = image::open(&out_path).ok();
+    let _ = std::fs::remove_file(out_path);
+    img
+}
+
+#[cfg(not(target_os = "macos"))]
+fn load_preview_image_with_sips(_path: &Path) -> Option<DynamicImage> {
+    None
+}
+
+fn rgba_to_color(pixel: image::Rgba<u8>) -> Color {
+    let [r, g, b, a] = pixel.0;
+    if a == 0 {
+        DARK_BG
+    } else {
+        Color::Rgb(r, g, b)
+    }
+}
+
+fn render_terminal_preview(frame: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, preview: &TerminalPreview) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+
+    let target_w = area.width as u32;
+    let target_h = (area.height as u32).saturating_mul(2);
+    if target_w == 0 || target_h == 0 {
+        return;
+    }
+
+    let (source_w, source_h) = preview.image.dimensions();
+    let scale = (target_w as f32 / source_w.max(1) as f32)
+        .min(target_h as f32 / source_h.max(1) as f32)
+        .max(0.01);
+    let scaled_w = ((source_w as f32 * scale).round() as u32).clamp(1, target_w);
+    let scaled_h = ((source_h as f32 * scale).round() as u32).clamp(1, target_h);
+    let resized: RgbaImage = preview
+        .image
+        .resize_exact(scaled_w, scaled_h, image::imageops::FilterType::Triangle)
+        .to_rgba8();
+
+    let left_pad = ((target_w - scaled_w) / 2) as usize;
+    let top_pad = ((target_h - scaled_h) / 4) as usize;
+    let rows = (scaled_h + 1) / 2;
+    let mut lines = Vec::new();
+
+    for _ in 0..top_pad {
+        lines.push(Line::from(""));
+    }
+
+    for row in 0..rows {
+        let mut spans = Vec::new();
+        if left_pad > 0 {
+            spans.push(Span::raw(" ".repeat(left_pad)));
+        }
+        let top_y = row * 2;
+        let bottom_y = top_y + 1;
+        for x in 0..scaled_w {
+            let top = rgba_to_color(*resized.get_pixel(x, top_y));
+            let bottom = if bottom_y < scaled_h {
+                rgba_to_color(*resized.get_pixel(x, bottom_y))
+            } else {
+                DARK_BG
+            };
+            spans.push(Span::styled("\u{2580}", Style::default().fg(top).bg(bottom)));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), area);
 }
 
 // ── Game color palette ──────────────────────────────────────────────────────
@@ -966,34 +1067,24 @@ fn try_apply_cmux_clipboard_source(
     }
 }
 
-fn try_load_preview(path: &str, picker: &Picker) -> Option<StatefulProtocol> {
+fn try_load_preview(path: &str) -> Result<Option<TerminalPreview>, String> {
     let cleaned = clean_path(path);
-    if cleaned.is_empty() { return None; }
+    if cleaned.is_empty() { return Ok(None); }
     let p = std::path::Path::new(&cleaned);
-    if !p.exists() { return None; }
-    let img = image::open(p).ok()?;
-    // Resize to reasonable thumbnail for terminal display
-    let thumb = img.resize(400, 400, image::imageops::FilterType::Triangle);
-    Some(picker.new_resize_protocol(thumb))
+    if !p.exists() { return Ok(None); }
+    let image = load_preview_image(p)?;
+    Ok(Some(TerminalPreview { image }))
 }
 
 pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&str>) -> Result<Option<(String, String)>> {
-    // Detect terminal image protocol BEFORE entering alternate screen
-    let mut picker = (0..3)
-        .find_map(|attempt| {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(80));
-            }
-            Picker::from_query_stdio().ok()
-        })
-        .unwrap_or_else(Picker::halfblocks);
-
     let mut session = TuiSession::new()?;
     let mut left_input = existing_left.unwrap_or("").to_string();
     let mut right_input = existing_right.unwrap_or("").to_string();
     let mut active_side: usize = 0;
-    let mut left_preview: Option<StatefulProtocol> = None;
-    let mut right_preview: Option<StatefulProtocol> = None;
+    let mut left_preview: Option<TerminalPreview> = None;
+    let mut right_preview: Option<TerminalPreview> = None;
+    let mut left_preview_error: Option<String> = None;
+    let mut right_preview_error: Option<String> = None;
     let mut left_prev_path = String::new();
     let mut right_prev_path = String::new();
     let cmux_clipboard_bridge = is_cmux_session();
@@ -1008,12 +1099,30 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
         // Reload previews when path changes
         let left_cleaned = clean_path(&left_input);
         if left_cleaned != left_prev_path {
-            left_preview = try_load_preview(&left_input, &mut picker);
+            match try_load_preview(&left_input) {
+                Ok(preview) => {
+                    left_preview = preview;
+                    left_preview_error = None;
+                }
+                Err(err) => {
+                    left_preview = None;
+                    left_preview_error = Some(err);
+                }
+            }
             left_prev_path = left_cleaned;
         }
         let right_cleaned = clean_path(&right_input);
         if right_cleaned != right_prev_path {
-            right_preview = try_load_preview(&right_input, &mut picker);
+            match try_load_preview(&right_input) {
+                Ok(preview) => {
+                    right_preview = preview;
+                    right_preview_error = None;
+                }
+                Err(err) => {
+                    right_preview = None;
+                    right_preview_error = Some(err);
+                }
+            }
             right_prev_path = right_cleaned;
         }
 
@@ -1083,10 +1192,10 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     .split(inner);
 
                 // Image preview area
-                let preview = if is_left { &mut left_preview } else { &mut right_preview };
-                if let Some(proto) = preview.as_mut() {
-                    let img_widget = StatefulImage::new();
-                    frame.render_stateful_widget(img_widget, inner_layout[0], proto);
+                let preview = if is_left { &left_preview } else { &right_preview };
+                let preview_error = if is_left { &left_preview_error } else { &right_preview_error };
+                if let Some(preview) = preview.as_ref() {
+                    render_terminal_preview(frame, inner_layout[0], preview);
                 } else {
                     let cleaned = clean_path(input);
                     let file_exists = !cleaned.is_empty() && Path::new(&cleaned).exists();
@@ -1097,10 +1206,16 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                             Line::from(Span::styled("an image file here", Style::default().fg(DIM_TEXT))),
                         ]
                     } else if file_exists {
+                        let detail = preview_error
+                            .as_deref()
+                            .map(|value| {
+                                if value.len() > 34 { format!("...{}", &value[value.len()-32..]) } else { value.to_string() }
+                            })
+                            .unwrap_or_else(|| "unknown decode error".to_string());
                         vec![
                             Line::from(Span::styled("\u{2714} File found", Style::default().fg(NEON_GREEN))),
-                            Line::from(Span::styled("(preview not supported", Style::default().fg(DIM_TEXT))),
-                            Line::from(Span::styled(" in this terminal)", Style::default().fg(DIM_TEXT))),
+                            Line::from(Span::styled("Preview decode failed:", Style::default().fg(DIM_TEXT))),
+                            Line::from(Span::styled(detail, Style::default().fg(DIM_TEXT))),
                         ]
                     } else {
                         vec![

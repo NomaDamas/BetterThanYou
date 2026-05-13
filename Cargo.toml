@@ -1,6 +1,6 @@
 [package]
 name = "better-than-you"
-version = "0.8.11"
+version = "0.8.12"
 edition = "2021"
 description = "CLI-first portrait battle tool for fictional AI-generated adult portraits"
 license = "MIT"
@@ -12,7 +12,7 @@ base64 = "0.22"
 chrono = { version = "0.4", features = ["clock"] }
 clap = { version = "4.5", features = ["derive"] }
 crossterm = "0.28"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "tiff", "webp"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
 ratatui = "0.30"
 serde = { version = "1.0", features = ["derive"] }
