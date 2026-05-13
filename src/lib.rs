@@ -3725,9 +3725,18 @@ async fn try_file_io(client: &Client, bytes: &[u8], filename: &str, mime: &str) 
 /// must degrade gracefully so a busted upstream never blocks startup.
 pub async fn check_latest_release_version() -> Option<String> {
     let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
+        .timeout(std::time::Duration::from_secs(6))
         .build()
         .ok()?;
+
+    if let Some(version) = check_latest_release_version_via_api(&client).await {
+        return Some(version);
+    }
+
+    check_latest_release_version_via_redirect(&client).await
+}
+
+async fn check_latest_release_version_via_api(client: &Client) -> Option<String> {
     let resp = client
         .get("https://api.github.com/repos/NomaDamas/BetterThanYou/releases/latest")
         .header(
@@ -3744,6 +3753,27 @@ pub async fn check_latest_release_version() -> Option<String> {
     let json: Value = resp.json().await.ok()?;
     let tag = json.get("tag_name")?.as_str()?;
     Some(tag.trim_start_matches('v').to_string())
+}
+
+async fn check_latest_release_version_via_redirect(client: &Client) -> Option<String> {
+    let url = client
+        .get("https://github.com/NomaDamas/BetterThanYou/releases/latest")
+        .header(
+            "User-Agent",
+            concat!("BetterThanYou/", env!("CARGO_PKG_VERSION")),
+        )
+        .send()
+        .await
+        .ok()?
+        .url()
+        .to_string();
+    extract_release_version_from_url(&url)
+}
+
+fn extract_release_version_from_url(url: &str) -> Option<String> {
+    let tag = url.split("/releases/tag/").nth(1)?;
+    let clean = tag.split(['?', '#']).next().unwrap_or(tag);
+    Some(clean.trim_start_matches('v').to_string())
 }
 
 /// Returns true if `latest` is strictly newer than `current` using semver-ish
@@ -4158,6 +4188,18 @@ mod tests {
         assert_eq!(
             normalize_source_input("\"file://localhost/Users/jinminseong/Desktop/A%20B.jpg\""),
             "/Users/jinminseong/Desktop/A B.jpg"
+        );
+    }
+
+    #[test]
+    fn extract_release_version_from_redirect_url() {
+        assert_eq!(
+            extract_release_version_from_url("https://github.com/NomaDamas/BetterThanYou/releases/tag/v0.8.16"),
+            Some("0.8.16".to_string())
+        );
+        assert_eq!(
+            extract_release_version_from_url("https://github.com/NomaDamas/BetterThanYou/releases/tag/v1.2.3?foo=bar"),
+            Some("1.2.3".to_string())
         );
     }
 

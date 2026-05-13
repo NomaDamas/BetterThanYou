@@ -159,6 +159,8 @@ struct OpenArgs {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct AppState {
     star_acknowledged: bool,
+    #[serde(default)]
+    star_ack_source: Option<String>,
     openai_api_key: Option<String>,
     #[serde(default)]
     anthropic_api_key: Option<String>,
@@ -233,6 +235,40 @@ fn save_app_state(state: &AppState) -> Result<()> {
     }
     fs::write(path, serde_json::to_vec_pretty(state)?)?;
     Ok(())
+}
+
+fn star_acknowledged(state: &AppState) -> bool {
+    state.star_acknowledged && matches!(state.star_ack_source.as_deref(), Some("gh"))
+}
+
+fn star_repo_via_gh() -> bool {
+    Command::new("gh")
+        .env("GH_PROMPT_DISABLED", "1")
+        .args(["repo", "star", "NomaDamas/BetterThanYou", "--yes"])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn open_star_repo_page() {
+    let star_url = "https://github.com/NomaDamas/BetterThanYou";
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let _ = Command::new(opener).arg(star_url).status();
+}
+
+fn handle_star_request(state: &mut AppState) -> Result<bool> {
+    if star_repo_via_gh() {
+        state.star_acknowledged = true;
+        state.star_ack_source = Some("gh".to_string());
+        save_app_state(state)?;
+        return Ok(true);
+    }
+
+    state.star_acknowledged = false;
+    state.star_ack_source = None;
+    save_app_state(state)?;
+    open_star_repo_page();
+    Ok(false)
 }
 
 fn remove_file_if_exists(path: &Path) {
@@ -337,12 +373,15 @@ async fn auto_update_check(skip: bool) {
     let log_path = std::env::temp_dir().join("btyu-update.log");
     let log_file = std::fs::File::create(&log_path).ok();
     let log_clone = log_file.as_ref().and_then(|f| f.try_clone().ok());
+    let latest_tag = format!("v{}", latest);
 
     let mut cmd = Command::new("cargo");
     cmd.args([
         "install",
         "--git",
         "https://github.com/NomaDamas/BetterThanYou",
+        "--tag",
+        latest_tag.as_str(),
         "--root",
         temp_root.to_string_lossy().as_ref(),
         "--force",
@@ -590,7 +629,7 @@ fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: 
 }
 
 fn maybe_print_star_reminder(state: &AppState) {
-    if !state.star_acknowledged && !io::stdout().is_terminal() {
+    if !star_acknowledged(state) && !io::stdout().is_terminal() {
         eprintln!("\u{2B50} Star one click = dev gets power-up!  https://github.com/NomaDamas/BetterThanYou");
     }
 }
@@ -1035,12 +1074,9 @@ async fn run_interactive_app() -> Result<()> {
     let mut state = SessionState::new();
 
     // Show animated splash screen before main menu
-    if let Ok(star_pressed) = ui::splash_screen(state.app_state.star_acknowledged) {
+    if let Ok(star_pressed) = ui::splash_screen(star_acknowledged(&state.app_state)) {
         if star_pressed {
-            let star_url = "https://github.com/NomaDamas/BetterThanYou";
-            let _ = Command::new("open").arg(star_url).status();
-            state.app_state.star_acknowledged = true;
-            let _ = save_app_state(&state.app_state);
+            let _ = handle_star_request(&mut state.app_state);
         }
     }
 
@@ -1052,7 +1088,7 @@ async fn run_interactive_app() -> Result<()> {
             t(lang, "share_result").to_string(),
             t(lang, "settings").to_string(),
         ];
-        if !state.app_state.star_acknowledged {
+        if !star_acknowledged(&state.app_state) {
             items.push(t(lang, "star_github").to_string());
         }
         items.push(t(lang, "quit").to_string());
@@ -1083,7 +1119,7 @@ async fn run_interactive_app() -> Result<()> {
                 "   For richer per-axis VLM analysis, add a key in Settings → API keys.".to_string(),
             );
         }
-        if !state.app_state.star_acknowledged {
+        if !star_acknowledged(&state.app_state) {
             subtitle.push(String::new());
             subtitle.push("\u{2B50} Star one click = dev gets power-up!  github.com/NomaDamas/BetterThanYou".to_string());
         }
@@ -1238,7 +1274,7 @@ async fn run_interactive_app() -> Result<()> {
                         "open_report",
                         "settings",
                     ];
-                    if !state.app_state.star_acknowledged {
+                    if !star_acknowledged(&state.app_state) {
                         item_keys.push("star_github");
                     }
                     item_keys.push("back");
@@ -1293,10 +1329,7 @@ async fn run_interactive_app() -> Result<()> {
                         }
                         "settings" => run_settings_menu(&mut state)?,
                         "star_github" => {
-                            let star_url = "https://github.com/NomaDamas/BetterThanYou";
-                            let _ = Command::new("open").arg(star_url).status();
-                            state.app_state.star_acknowledged = true;
-                            save_app_state(&state.app_state)?;
+                            let _ = handle_star_request(&mut state.app_state)?;
                         }
                         "back" => break,
                         _ => return Ok(()),
@@ -1309,11 +1342,8 @@ async fn run_interactive_app() -> Result<()> {
             }
             Some(2) => run_share_menu(&mut state).await?,
             Some(3) => run_settings_menu(&mut state)?,
-            Some(4) if !state.app_state.star_acknowledged => {
-                let star_url = "https://github.com/NomaDamas/BetterThanYou";
-                let _ = Command::new("open").arg(star_url).status();
-                state.app_state.star_acknowledged = true;
-                save_app_state(&state.app_state)?;
+            Some(4) if !star_acknowledged(&state.app_state) => {
+                let _ = handle_star_request(&mut state.app_state)?;
             }
             _ => return Ok(()),
         }
@@ -1403,5 +1433,27 @@ async fn main() -> Result<()> {
             };
             run_battle(args).await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn star_acknowledged_requires_gh_source() {
+        let plain_true = AppState {
+            star_acknowledged: true,
+            star_ack_source: None,
+            ..AppState::default()
+        };
+        assert!(!star_acknowledged(&plain_true));
+
+        let gh_true = AppState {
+            star_acknowledged: true,
+            star_ack_source: Some("gh".to_string()),
+            ..AppState::default()
+        };
+        assert!(star_acknowledged(&gh_true));
     }
 }
