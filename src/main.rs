@@ -1,6 +1,7 @@
 mod ui;
 
 use std::fs;
+use std::future::Future;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -865,7 +866,7 @@ async fn run_battle(args: BattleArgs) -> Result<()> {
             &["Enter/q return".to_string(), "o open report".to_string()],
         )?;
         if matches!(exit, ui::BattleViewExit::OpenRequest) {
-            handle_open_request(&html_path).await?;
+            run_with_report_open_loading(handle_open_request(&html_path)).await?;
         }
     } else {
         println!(
@@ -908,6 +909,34 @@ async fn handle_open_request(html_path: &Path) -> Result<()> {
         open_path(html_path)?;
     }
     Ok(())
+}
+
+async fn run_with_report_open_loading<F>(future: F) -> Result<()>
+where
+    F: Future<Output = Result<()>>,
+{
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return future.await;
+    }
+
+    let done = Arc::new(AtomicBool::new(false));
+    let done_anim = done.clone();
+    let anim_thread = std::thread::spawn(move || {
+        let _ = ui::report_open_loading_screen(done_anim);
+    });
+
+    let result = future.await;
+    done.store(true, Ordering::Relaxed);
+    let _ = anim_thread.join();
+    let _ = crossterm::terminal::disable_raw_mode();
+    let _ = crossterm::execute!(
+        io::stdout(),
+        crossterm::terminal::LeaveAlternateScreen,
+        crossterm::cursor::Show
+    );
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    result
 }
 
 async fn run_report(args: ReportArgs) -> Result<()> {
@@ -1724,7 +1753,10 @@ async fn run_interactive_app() -> Result<()> {
                     &["Enter/q return".to_string(), "o open report".to_string()],
                 ) {
                     Ok(ui::BattleViewExit::OpenRequest) => {
-                        handle_open_request(&PathBuf::from(&artifacts.html_path)).await?;
+                        run_with_report_open_loading(handle_open_request(&PathBuf::from(
+                            &artifacts.html_path,
+                        )))
+                        .await?;
                     }
                     _ => {}
                 }
@@ -1797,7 +1829,7 @@ async fn run_interactive_app() -> Result<()> {
                                 .last_html
                                 .clone()
                                 .unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
-                            open_path(&path)?;
+                            run_with_report_open_loading(async { open_path(&path) }).await?;
                         }
                         "settings" => run_settings_menu(&mut state)?,
                         "star_github" => {
@@ -1813,7 +1845,7 @@ async fn run_interactive_app() -> Result<()> {
                     .last_html
                     .clone()
                     .unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
-                open_path(&path)?;
+                run_with_report_open_loading(async { open_path(&path) }).await?;
             }
             Some(2) => run_share_menu(&mut state).await?,
             Some(3) => run_settings_menu(&mut state)?,

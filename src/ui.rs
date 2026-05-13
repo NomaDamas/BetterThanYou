@@ -1890,6 +1890,132 @@ const BATTLE_PHRASES: [&str; 8] = [
     "Rendering verdict...",
 ];
 
+const REPORT_OPEN_PHRASES: [&str; 6] = [
+    "Preparing report...",
+    "Publishing share page when needed...",
+    "Copying public link...",
+    "Launching browser...",
+    "Keeping the arena warm...",
+    "Almost there...",
+];
+
+/// Shows animated loading screen while a report is being prepared/opened.
+/// Call `done.store(true, Ordering::Relaxed)` from another thread to stop.
+pub fn report_open_loading_screen(done: Arc<AtomicBool>) -> Result<()> {
+    let mut session = TuiSession::new()?;
+    let mut frame: u64 = 0;
+
+    while event::poll(Duration::from_millis(1))? {
+        let _ = event::read()?;
+    }
+
+    while !done.load(Ordering::Relaxed) {
+        let f = frame;
+        session.terminal.draw(|frame_ref| {
+            let area = frame_ref.area();
+            frame_ref.render_widget(Clear, area);
+            frame_ref.render_widget(Block::default().style(Style::default().bg(DARK_BG)), area);
+
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(5),
+                    Constraint::Length(3),
+                    Constraint::Length(7),
+                    Constraint::Length(5),
+                    Constraint::Min(3),
+                ])
+                .split(area);
+
+            let title_color = match (f / 3) % 4 {
+                0 => NEON_CYAN,
+                1 => NEON_GREEN,
+                2 => NEON_GOLD,
+                _ => NEON_MAGENTA,
+            };
+            let title = Paragraph::new(Line::from(Span::styled(
+                "\u{1F4C4}  OPENING REPORT  \u{1F4C4}",
+                Style::default()
+                    .fg(title_color)
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .alignment(Alignment::Center)
+            .block(game_block("REPORT", title_color));
+            frame_ref.render_widget(title, layout[1]);
+
+            let shimmer = match f % 6 {
+                0 => "\u{25B6}      ",
+                1 => " \u{25B6}     ",
+                2 => "  \u{25B6}    ",
+                3 => "   \u{25B6}   ",
+                4 => "    \u{25B6}  ",
+                _ => "     \u{25B6} ",
+            };
+            let card = Paragraph::new(vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Your browser may appear in front of the TUI.",
+                    Style::default().fg(LIGHT_TEXT),
+                )),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(shimmer, Style::default().fg(NEON_GREEN)),
+                    Span::styled(
+                        " report handoff in progress ",
+                        Style::default().fg(DIM_TEXT),
+                    ),
+                    Span::styled(shimmer, Style::default().fg(NEON_CYAN)),
+                ]),
+            ])
+            .alignment(Alignment::Center)
+            .block(game_block_double("STAY IN THE ARENA", NEON_CYAN));
+            frame_ref.render_widget(card, layout[2]);
+
+            let spinner = SPINNER_FRAMES[(f as usize) % SPINNER_FRAMES.len()];
+            let phrase = REPORT_OPEN_PHRASES[((f / 8) as usize) % REPORT_OPEN_PHRASES.len()];
+            let bar_w = 30usize;
+            let progress = ((f % (bar_w as u64 * 2)) as usize).min(bar_w);
+            let bar = format!(
+                "{}{}",
+                "\u{2588}".repeat(progress),
+                "\u{2591}".repeat(bar_w - progress)
+            );
+            let status = Paragraph::new(vec![
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled(format!("  {} ", spinner), Style::default().fg(NEON_CYAN)),
+                    Span::styled(phrase, Style::default().fg(LIGHT_TEXT)),
+                ]),
+                Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(bar, Style::default().fg(NEON_GREEN)),
+                ]),
+            ])
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+            );
+            frame_ref.render_widget(status, layout[3]);
+        })?;
+
+        frame = frame.wrapping_add(1);
+
+        if event::poll(Duration::from_millis(200))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press && key.code == KeyCode::Esc {
+                    break;
+                }
+            }
+        }
+    }
+
+    drop(session);
+    Ok(())
+}
+
 /// Shows animated loading screen while VLM analysis runs.
 /// Call `done.store(true, Ordering::Relaxed)` from another thread to stop.
 pub fn battle_loading_screen(
@@ -2354,7 +2480,10 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                             " [Y / YES / Enter] ",
                             Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
                         ),
-                        Span::styled("Open GitHub and remember", Style::default().fg(DIM_TEXT)),
+                        Span::styled(
+                            "Auto-star with gh, web fallback",
+                            Style::default().fg(DIM_TEXT),
+                        ),
                         Span::styled("    ", Style::default()),
                         Span::styled(
                             " [N] ",
