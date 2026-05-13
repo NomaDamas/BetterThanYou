@@ -1,5 +1,4 @@
-<img width="2172" height="724" alt="github banner" src="https://github.com/user-attachments/assets/e47b565b-9db5-47a5-b317-dbd6fedf4a38" />
-
+<img width="2172" height="724" alt="깃헙 최종 배너" src="https://github.com/user-attachments/assets/7a9b2656-8268-4e12-bf57-fa68d86545d8" />
 
 # 🦖 BetterThanYou
 
