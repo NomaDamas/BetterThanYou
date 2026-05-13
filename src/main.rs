@@ -192,6 +192,10 @@ struct AppState {
     gemini_api_key: Option<String>,
     #[serde(default)]
     grok_api_key: Option<String>,
+    #[serde(default)]
+    publish_url: Option<String>,
+    #[serde(default)]
+    publish_token: Option<String>,
     judge: Option<JudgeCli>,
     model: Option<String>,
     out_dir: Option<PathBuf>,
@@ -222,6 +226,7 @@ struct SessionState {
 impl SessionState {
     fn new() -> Self {
         let app_state = load_app_state();
+        apply_publish_config_from_state(&app_state);
         Self {
             judge: app_state.judge.clone().unwrap_or(JudgeCli::Auto),
             model: app_state
@@ -271,6 +276,57 @@ fn save_app_state(state: &AppState) -> Result<()> {
     }
     fs::write(path, serde_json::to_vec_pretty(state)?)?;
     Ok(())
+}
+
+fn default_publish_url() -> &'static str {
+    "https://better-than-you.nomadamas.org"
+}
+
+fn effective_publish_url(state: &AppState) -> String {
+    state
+        .publish_url
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| std::env::var("BTYU_PUBLISH_URL").ok())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default_publish_url().to_string())
+}
+
+fn publish_token_configured(state: &AppState) -> bool {
+    state
+        .publish_token
+        .as_ref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+        || [
+            "BTYU_PUBLISH_TOKEN",
+            "BTYU_CLOUDFLARE_PUBLISH_TOKEN",
+            "CLOUDFLARE_PUBLISH_TOKEN",
+            "PUBLISH_TOKEN",
+        ]
+        .iter()
+        .any(|key| {
+            std::env::var(key)
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false)
+        })
+}
+
+fn apply_publish_config_from_state(state: &AppState) {
+    if let Some(url) = state
+        .publish_url
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        std::env::set_var("BTYU_PUBLISH_URL", url);
+    }
+    if let Some(token) = state
+        .publish_token
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        std::env::set_var("BTYU_PUBLISH_TOKEN", token);
+    }
 }
 
 fn star_acknowledged(state: &AppState) -> bool {
@@ -809,12 +865,7 @@ async fn run_battle(args: BattleArgs) -> Result<()> {
             &["Enter/q return".to_string(), "o open report".to_string()],
         )?;
         if matches!(exit, ui::BattleViewExit::OpenRequest) {
-            handle_open_request(
-                &result,
-                &html_path,
-                &args.out_dir.clone().unwrap_or_else(default_reports_dir),
-            )
-            .await?;
+            handle_open_request(&html_path).await?;
         }
     } else {
         println!(
@@ -844,20 +895,8 @@ async fn publish_current_share(
     Ok(published)
 }
 
-async fn handle_open_request(
-    result: &BattleResult,
-    html_path: &Path,
-    output_dir: &Path,
-) -> Result<()> {
-    match publish_current_share(result, html_path, output_dir).await {
-        Ok(published) => {
-            let _ = write_clipboard_text(&published.share_page_url);
-            open_path(PathBuf::from(&published.share_page_url).as_path())?;
-        }
-        Err(_) => {
-            open_path(html_path)?;
-        }
-    }
+async fn handle_open_request(html_path: &Path) -> Result<()> {
+    open_path(html_path)?;
     Ok(())
 }
 
@@ -924,6 +963,8 @@ fn run_serve(args: ServeArgs) -> Result<()> {
 }
 
 async fn run_publish(args: PublishArgs) -> Result<()> {
+    let app_state = load_app_state();
+    apply_publish_config_from_state(&app_state);
     let output_dir = args.out_dir.unwrap_or_else(default_reports_dir);
     let battle_json = args
         .battle_json_path
@@ -970,6 +1011,18 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
         let subtitle = vec![
             format!("Current judge: {}", state.judge.as_str()),
             format!("Current model: {}", state.model),
+            format!(
+                "Public share URL: {}",
+                effective_publish_url(&state.app_state)
+            ),
+            format!(
+                "Public share token: {}",
+                if publish_token_configured(&state.app_state) {
+                    "configured"
+                } else {
+                    "not configured"
+                }
+            ),
         ];
         let items = vec![
             "Judge mode".to_string(),
@@ -978,6 +1031,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
             "Paste both from clipboard".to_string(),
             "Output directory".to_string(),
             "API keys".to_string(),
+            "Public share (Cloudflare)".to_string(),
             "Aesthetic tuning".to_string(),
             "Language".to_string(),
             "Clear reports history".to_string(),
@@ -1171,7 +1225,33 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     _ => {}
                 }
             }
-            Some(7) => {
+            Some(6) => {
+                let url_default = effective_publish_url(&state.app_state);
+                if let Some(url) = ui::text_input(
+                    "Public Share URL",
+                    "Cloudflare Worker URL, e.g. https://share.example.com",
+                    &url_default,
+                    false,
+                )? {
+                    if !url.trim().is_empty() {
+                        state.app_state.publish_url =
+                            Some(url.trim().trim_end_matches('/').to_string());
+                    }
+                }
+                if let Some(token) = ui::text_input(
+                    "Public Share Token",
+                    "Paste the Worker PUBLISH_TOKEN secret. Required for friend-share links.",
+                    "",
+                    true,
+                )? {
+                    if !token.trim().is_empty() {
+                        state.app_state.publish_token = Some(token.trim().to_string());
+                    }
+                }
+                apply_publish_config_from_state(&state.app_state);
+                save_app_state(&state.app_state)?;
+            }
+            Some(8) => {
                 let lang_items = vec![
                     "English".to_string(),
                     "한국어".to_string(),
@@ -1192,7 +1272,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     save_app_state(&state.app_state)?;
                 }
             }
-            Some(6) => loop {
+            Some(7) => loop {
                 let subtitle = vec![
                     "Aesthetic tuning changes only affect total-score weighting.".to_string(),
                     "Set axis weight with 0+ numbers. Empty keeps previous value.".to_string(),
@@ -1242,7 +1322,7 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     _ => break,
                 }
             },
-            Some(8) => {
+            Some(9) => {
                 let confirm_items = vec![
                     "Yes, delete all saved reports".to_string(),
                     "Cancel".to_string(),
@@ -1473,10 +1553,13 @@ async fn run_interactive_app() -> Result<()> {
         ];
         if no_keys {
             subtitle.push(String::new());
-            subtitle.push("\u{26A0}  No VLM API key set — running heuristic only.".to_string());
+            subtitle.push("\u{26A0}  No API key configured.".to_string());
             subtitle.push(
-                "   For richer per-axis VLM analysis, add a key in Settings → API keys."
+                "   Go to Settings -> API Keys to add OpenAI / Anthropic / Gemini / Grok."
                     .to_string(),
+            );
+            subtitle.push(
+                "   Until then, battles run with the local heuristic judge only.".to_string(),
             );
         }
         if !star_acknowledged(&state.app_state) {
@@ -1631,12 +1714,7 @@ async fn run_interactive_app() -> Result<()> {
                     &["Enter/q return".to_string(), "o open report".to_string()],
                 ) {
                     Ok(ui::BattleViewExit::OpenRequest) => {
-                        handle_open_request(
-                            &result,
-                            &PathBuf::from(&artifacts.html_path),
-                            &state.out_dir,
-                        )
-                        .await?;
+                        handle_open_request(&PathBuf::from(&artifacts.html_path)).await?;
                     }
                     _ => {}
                 }

@@ -5020,67 +5020,52 @@ pub async fn publish_share_bundle_to_web(
         .unwrap_or("battle.html")
         .to_string();
 
-    let (published_preview, published_report, published_page) = if let Some((base_url, token)) =
-        nomadamas_publish_config()
-    {
-        let client = Client::new();
-        let published_preview = publish_bytes_to_nomadamas(
-            &client,
-            &base_url,
-            &token,
-            &preview_bytes,
-            &preview_name,
-            "image/png",
+    let (base_url, token) = nomadamas_publish_config().ok_or_else(|| {
+        anyhow!(
+            "Public sharing is not configured. Set BTYU_PUBLISH_URL and BTYU_PUBLISH_TOKEN, or configure them in Settings -> Public share."
         )
-        .await?;
-        let published_report_asset = publish_bytes_to_nomadamas(
-            &client,
-            &base_url,
-            &token,
-            &html_bytes,
-            &html_name,
-            "text/html",
-        )
-        .await?;
-        let published_report = PublishedReport {
-            qr_ascii: qr_ascii(&published_report_asset.url),
-            url: published_report_asset.url,
-            provider: published_report_asset.provider,
-        };
-        let caption = share_caption(result, "x");
-        let share_page_html = render_public_share_page(
-            result,
-            &caption,
-            &published_preview.url,
-            &published_report.url,
-        );
-        let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
-        let published_page = publish_bytes_to_nomadamas(
-            &client,
-            &base_url,
-            &token,
-            share_page_html.as_bytes(),
-            &share_page_name,
-            "text/html",
-        )
-        .await?;
-        (published_preview, published_report, published_page)
-    } else {
-        let published_preview =
-            publish_bytes_to_web(&preview_bytes, &preview_name, "image/png").await?;
-        let published_report = publish_html_to_web(html_path).await?;
-        let caption = share_caption(result, "x");
-        let share_page_html = render_public_share_page(
-            result,
-            &caption,
-            &published_preview.url,
-            &published_report.url,
-        );
-        let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
-        let published_page =
-            publish_bytes_to_web(share_page_html.as_bytes(), &share_page_name, "text/html").await?;
-        (published_preview, published_report, published_page)
+    })?;
+    let client = Client::new();
+    let published_preview = publish_bytes_to_nomadamas(
+        &client,
+        &base_url,
+        &token,
+        &preview_bytes,
+        &preview_name,
+        "image/png",
+    )
+    .await?;
+    let published_report_asset = publish_bytes_to_nomadamas(
+        &client,
+        &base_url,
+        &token,
+        &html_bytes,
+        &html_name,
+        "text/html",
+    )
+    .await?;
+    let published_report = PublishedReport {
+        qr_ascii: qr_ascii(&published_report_asset.url),
+        url: published_report_asset.url,
+        provider: published_report_asset.provider,
     };
+    let caption = share_caption(result, "x");
+    let share_page_html = render_public_share_page(
+        result,
+        &caption,
+        &published_preview.url,
+        &published_report.url,
+    );
+    let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
+    let published_page = publish_bytes_to_nomadamas(
+        &client,
+        &base_url,
+        &token,
+        share_page_html.as_bytes(),
+        &share_page_name,
+        "text/html",
+    )
+    .await?;
 
     let caption = share_caption(result, "x");
     let social_links =
