@@ -1222,6 +1222,10 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     if let Some(protocol) = preview.protocol.as_mut() {
                         let img_widget = StatefulImage::new();
                         frame.render_stateful_widget(img_widget, inner_layout[0], protocol);
+                        if matches!(protocol.last_encoding_result(), Some(Err(_))) {
+                            preview.protocol = None;
+                            render_terminal_preview(frame, inner_layout[0], preview);
+                        }
                     } else {
                         render_terminal_preview(frame, inner_layout[0], preview);
                     }
