@@ -1,6 +1,6 @@
 export interface Env {
   SHARES: KVNamespace;
-  PUBLISH_TOKEN: string;
+  PUBLISH_TOKEN?: string;
 }
 
 interface ShareMetadata {
@@ -9,7 +9,9 @@ interface ShareMetadata {
   originalFilename: string;
 }
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
+const RATE_LIMIT_MAX_UPLOADS = 30;
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ID_WITH_EXT_RE = /^[a-z0-9]{10}\.(html|png|json)$/;
 const SHARE_TTL_SECONDS = 60 * 60 * 24 * 90;
@@ -59,8 +61,12 @@ export default {
 };
 
 async function uploadShare(request: Request, env: Env, url: URL): Promise<Response> {
-  if (!env.PUBLISH_TOKEN || request.headers.get("authorization") !== `Bearer ${env.PUBLISH_TOKEN}`) {
+  if (env.PUBLISH_TOKEN && request.headers.get("authorization") && request.headers.get("authorization") !== `Bearer ${env.PUBLISH_TOKEN}`) {
     return jsonResponse({ error: "unauthorized" }, 401);
+  }
+  const rateLimit = await enforceRateLimit(request, env);
+  if (rateLimit) {
+    return rateLimit;
   }
 
   const kindParam = url.searchParams.get("kind") ?? "html";
@@ -103,6 +109,20 @@ async function uploadShare(request: Request, env: Env, url: URL): Promise<Respon
     url: `https://${host}/s/${id}.${meta.ext}`,
     kind: kindParam,
   });
+}
+
+async function enforceRateLimit(request: Request, env: Env): Promise<Response | null> {
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const safeIp = ip.replace(/[^a-zA-Z0-9:.:-]/g, "_").slice(0, 80);
+  const key = `rate/${safeIp}`;
+  const current = Number((await env.SHARES.get(key)) ?? "0");
+  if (Number.isFinite(current) && current >= RATE_LIMIT_MAX_UPLOADS) {
+    return jsonResponse({ error: "rate limited" }, 429);
+  }
+  await env.SHARES.put(key, String((Number.isFinite(current) ? current : 0) + 1), {
+    expirationTtl: RATE_LIMIT_WINDOW_SECONDS,
+  });
+  return null;
 }
 
 async function getShare(env: Env, idWithExt: string): Promise<Response> {

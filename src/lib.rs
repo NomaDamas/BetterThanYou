@@ -4774,25 +4774,24 @@ pub fn is_newer_version(latest: &str, current: &str) -> bool {
     }
 }
 
-/// Read the configured nomadamas-style publish endpoint and token from env.
-/// Returns `Some((base_url, token))` only when both are non-empty; otherwise `None`.
-pub fn nomadamas_publish_config() -> Option<(String, String)> {
+/// Read the configured nomadamas-style publish endpoint and optional token from env.
+pub fn nomadamas_publish_config() -> (String, Option<String>) {
     let token = first_non_empty_env(&[
         "BTYU_PUBLISH_TOKEN",
         "BTYU_CLOUDFLARE_PUBLISH_TOKEN",
         "CLOUDFLARE_PUBLISH_TOKEN",
         "PUBLISH_TOKEN",
-    ])?;
+    ]);
     let url = first_non_empty_env(&[
         "BTYU_PUBLISH_URL",
         "BTYU_CLOUDFLARE_PUBLISH_URL",
         "CLOUDFLARE_PUBLISH_URL",
     ])
     .unwrap_or_else(|| "https://better-than-you.nomadamas.org".to_string());
-    Some((
+    (
         url.trim().trim_end_matches('/').to_string(),
-        token.trim().to_string(),
-    ))
+        token.map(|value| value.trim().to_string()),
+    )
 }
 
 fn first_non_empty_env(keys: &[&str]) -> Option<String> {
@@ -4805,7 +4804,7 @@ fn first_non_empty_env(keys: &[&str]) -> Option<String> {
 async fn try_nomadamas_share(
     client: &Client,
     base_url: &str,
-    token: &str,
+    token: Option<&str>,
     bytes: &[u8],
     filename: &str,
     mime: &str,
@@ -4827,15 +4826,19 @@ async fn try_nomadamas_share(
         urlencoding::encode(filename),
     );
 
-    let response = client
+    let mut request = client
         .post(&endpoint)
-        .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", mime)
         .header(
             "User-Agent",
             concat!("BetterThanYou/", env!("CARGO_PKG_VERSION")),
         )
-        .body(bytes.to_vec())
+        .body(bytes.to_vec());
+    if let Some(token) = token.filter(|value| !value.trim().is_empty()) {
+        request = request.header("Authorization", format!("Bearer {}", token));
+    }
+
+    let response = request
         .send()
         .await
         .with_context(|| "nomadamas: network error")?;
@@ -4893,22 +4896,27 @@ async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str, mime: &str) -
 
 async fn publish_bytes_to_web(bytes: &[u8], filename: &str, mime: &str) -> Result<PublishedAsset> {
     let client = Client::new();
-    let mut last_err: Option<String> = None;
 
     // Prefer self-hosted Cloudflare endpoint when configured. Falls back silently on failure.
-    if let Some((base_url, token)) = nomadamas_publish_config() {
-        match try_nomadamas_share(&client, &base_url, &token, bytes, filename, mime).await {
-            Ok(url) => {
-                return Ok(PublishedAsset {
-                    url,
-                    provider: "nomadamas.org".to_string(),
-                });
-            }
-            Err(e) => {
-                last_err = Some(format!("nomadamas.org: {}", e));
-            }
+    let (base_url, token) = nomadamas_publish_config();
+    let mut last_err = match try_nomadamas_share(
+        &client,
+        &base_url,
+        token.as_deref(),
+        bytes,
+        filename,
+        mime,
+    )
+    .await
+    {
+        Ok(url) => {
+            return Ok(PublishedAsset {
+                url,
+                provider: nomadamas_provider_name(&base_url),
+            });
         }
-    }
+        Err(e) => Some(format!("{}: {}", nomadamas_provider_name(&base_url), e)),
+    };
 
     // Order: catbox (permanent) → litterbox (72h, very reliable) → tmpfiles → file.io → 0x0.st
     for (name, result) in [
@@ -4949,7 +4957,7 @@ async fn publish_bytes_to_web(bytes: &[u8], filename: &str, mime: &str) -> Resul
 async fn publish_bytes_to_nomadamas(
     client: &Client,
     base_url: &str,
-    token: &str,
+    token: Option<&str>,
     bytes: &[u8],
     filename: &str,
     mime: &str,
@@ -5020,16 +5028,12 @@ pub async fn publish_share_bundle_to_web(
         .unwrap_or("battle.html")
         .to_string();
 
-    let (base_url, token) = nomadamas_publish_config().ok_or_else(|| {
-        anyhow!(
-            "Public sharing is not configured. Set BTYU_PUBLISH_URL and BTYU_PUBLISH_TOKEN, or configure them in Settings -> Public share."
-        )
-    })?;
+    let (base_url, token) = nomadamas_publish_config();
     let client = Client::new();
     let published_preview = publish_bytes_to_nomadamas(
         &client,
         &base_url,
-        &token,
+        token.as_deref(),
         &preview_bytes,
         &preview_name,
         "image/png",
@@ -5038,7 +5042,7 @@ pub async fn publish_share_bundle_to_web(
     let published_report_asset = publish_bytes_to_nomadamas(
         &client,
         &base_url,
-        &token,
+        token.as_deref(),
         &html_bytes,
         &html_name,
         "text/html",
@@ -5060,7 +5064,7 @@ pub async fn publish_share_bundle_to_web(
     let published_page = publish_bytes_to_nomadamas(
         &client,
         &base_url,
-        &token,
+        token.as_deref(),
         share_page_html.as_bytes(),
         &share_page_name,
         "text/html",

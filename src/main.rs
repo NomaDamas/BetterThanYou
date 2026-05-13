@@ -896,7 +896,17 @@ async fn publish_current_share(
 }
 
 async fn handle_open_request(html_path: &Path) -> Result<()> {
-    open_path(html_path)?;
+    let output_dir = html_path.parent().unwrap_or_else(|| Path::new("."));
+    let battle_json = output_dir.join("latest-battle.json");
+    if battle_json.exists() {
+        let bytes = fs::read(&battle_json)?;
+        let result: BattleResult = serde_json::from_slice(&bytes)?;
+        let published = publish_current_share(&result, html_path, output_dir).await?;
+        let _ = write_clipboard_text(&published.share_page_url);
+        open_path(PathBuf::from(&published.share_page_url).as_path())?;
+    } else {
+        open_path(html_path)?;
+    }
     Ok(())
 }
 
