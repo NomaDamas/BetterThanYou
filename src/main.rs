@@ -56,7 +56,7 @@ impl JudgeCli {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "better-than-you", about = "CLI-first portrait battle tool")]
+#[command(name = "better-than-you", version, about = "CLI-first portrait battle tool")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,

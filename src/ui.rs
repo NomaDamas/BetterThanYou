@@ -1,5 +1,5 @@
 use std::io::{self, Stdout};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -26,6 +26,27 @@ fn try_load_preview_from_data_url(data_url: &str, picker: &mut Picker) -> Option
         .ok()?;
     let img = image::load_from_memory(&bytes).ok()?;
     Some(picker.new_resize_protocol(img))
+}
+
+fn battle_view_photo_height(area_height: u16, stat_height: u16, dual_height: u16) -> u16 {
+    const HEADER_HEIGHT: u16 = 6;
+    const FOOTER_HEIGHT: u16 = 3;
+    const MIN_ANALYSIS_HEIGHT: u16 = 4;
+    const MIN_PHOTO_HEIGHT: u16 = 5;
+    const MAX_PHOTO_HEIGHT: u16 = 12;
+
+    let fixed = HEADER_HEIGHT
+        .saturating_add(dual_height)
+        .saturating_add(stat_height)
+        .saturating_add(FOOTER_HEIGHT)
+        .saturating_add(MIN_ANALYSIS_HEIGHT);
+    let available = area_height.saturating_sub(fixed);
+
+    if available >= MIN_PHOTO_HEIGHT {
+        available.min(MAX_PHOTO_HEIGHT)
+    } else {
+        0
+    }
 }
 
 // ── Game color palette ──────────────────────────────────────────────────────
@@ -413,9 +434,11 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
             // Compact: 1 line per axis + 2 for borders
             let stat_height = (axis_count as u16) + 2;
 
-            // Reserve enough room for photo thumbnails when the terminal is tall
-            // enough; otherwise hide them to keep the analysis readable.
-            let photo_height: u16 = if area.height >= 40 { 12 } else { 0 };
+            // Show thumbnails whenever the pane has enough spare rows instead
+            // of requiring a full-height terminal. cmux panes are often 30-35
+            // rows tall, so the old hard 40-row cutoff hid previews entirely.
+            let photo_height: u16 =
+                battle_view_photo_height(area.height, stat_height, dual_height);
 
             let layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -812,7 +835,7 @@ fn clean_path(input: &str) -> String {
     }
 
     // macOS drag-and-drop escapes spaces with backslash: /path/to/my\ file.jpg
-    s.replace("\\ ", " ")
+    s = s.replace("\\ ", " ")
         .replace("\\(", "(")
         .replace("\\)", ")")
         .replace("\\[", "[")
@@ -820,7 +843,15 @@ fn clean_path(input: &str) -> String {
         .replace("\\{", "{")
         .replace("\\}", "}")
         .replace("\\'", "'")
-        .replace("\\\"", "\"")
+        .replace("\\\"", "\"");
+
+    if let Some(rest) = s.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join(rest).display().to_string();
+        }
+    }
+
+    s
 }
 
 fn is_cmux_session() -> bool {
@@ -966,11 +997,7 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
     let mut left_prev_path = String::new();
     let mut right_prev_path = String::new();
     let cmux_clipboard_bridge = is_cmux_session();
-    let mut last_clipboard_source = if cmux_clipboard_bridge {
-        read_clipboard_text().unwrap_or_default().trim().to_string()
-    } else {
-        String::new()
-    };
+    let mut last_clipboard_source = String::new();
 
     // Drain buffered events
     while event::poll(Duration::from_millis(1))? {
@@ -1017,7 +1044,7 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
             ];
             if cmux_clipboard_bridge {
                 title_lines.push(Line::from(Span::styled(
-                    "cmux bridge: copy an image file/path to auto-fill this screen",
+                    "cmux: copy a file/path or use scripts/better-than-you-cmux-drop",
                     Style::default().fg(NEON_CYAN),
                 )));
             }
@@ -1181,6 +1208,7 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                 // If paste looks like a file path or URL, replace instead of append
                 let is_path = cleaned.starts_with('/')
                     || cleaned.starts_with('~')
+                    || cleaned.starts_with("file://")
                     || cleaned.starts_with("http")
                     || cleaned.starts_with("data:")
                     || cleaned.starts_with('\'')
@@ -1192,6 +1220,38 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                 }
             }
             _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn battle_view_photo_height_works_in_cmux_sized_panes() {
+        assert_eq!(battle_view_photo_height(40, 12, 0), 12);
+        assert_eq!(battle_view_photo_height(32, 12, 0), 7);
+        assert_eq!(battle_view_photo_height(30, 12, 0), 5);
+        assert_eq!(battle_view_photo_height(29, 12, 0), 0);
+    }
+
+    #[test]
+    fn clean_path_accepts_terminal_drop_forms() {
+        assert_eq!(
+            clean_path("\"file://localhost/Users/jinminseong/Desktop/A%20B.jpg\""),
+            "/Users/jinminseong/Desktop/A B.jpg"
+        );
+        assert_eq!(
+            clean_path("/Users/jinminseong/Desktop/my\\ photo\\(1\\).png"),
+            "/Users/jinminseong/Desktop/my photo(1).png"
+        );
+
+        if let Some(home) = std::env::var_os("HOME") {
+            assert_eq!(
+                clean_path("~/portrait.png"),
+                PathBuf::from(home).join("portrait.png").display().to_string()
+            );
         }
     }
 }
