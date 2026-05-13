@@ -4,10 +4,16 @@ use std::process::Command;
 use std::time::Duration;
 
 use anyhow::Result;
-use better_than_you::{localized_axis_short, read_clipboard_text, BattleResult, Language, SavedArtifacts};
+use base64::Engine as _;
+use better_than_you::{
+    localized_axis_short, read_clipboard_text, BattleResult, Language, SavedArtifacts,
+};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use crossterm::{cursor, execute};
+use image::{DynamicImage, GenericImageView, RgbaImage};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
@@ -17,8 +23,6 @@ use ratatui::Terminal;
 use ratatui_image::picker::{Picker, ProtocolType};
 use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::StatefulImage;
-use base64::Engine as _;
-use image::{DynamicImage, GenericImageView, RgbaImage};
 
 fn try_load_preview_from_data_url(data_url: &str, picker: &mut Picker) -> Option<StatefulProtocol> {
     let (_, encoded) = data_url.split_once(',')?;
@@ -61,6 +65,56 @@ fn should_force_ghostty_kitty() -> bool {
         .unwrap_or(false)
 }
 
+fn forced_image_protocol_from_env() -> Option<ProtocolType> {
+    let explicit = std::env::var("BTYU_IMAGE_PROTOCOL")
+        .ok()
+        .map(|value| value.to_ascii_lowercase());
+    match explicit.as_deref() {
+        Some("iterm") | Some("iterm2") => return Some(ProtocolType::Iterm2),
+        Some("kitty") => return Some(ProtocolType::Kitty),
+        Some("sixel") => return Some(ProtocolType::Sixel),
+        Some("halfblocks") | Some("off") | Some("none") => return Some(ProtocolType::Halfblocks),
+        _ => {}
+    }
+
+    let term_program = std::env::var("TERM_PROGRAM")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if term_program.contains("iterm") || term_program.contains("wezterm") {
+        return Some(ProtocolType::Iterm2);
+    }
+    if term_program.contains("ghostty") {
+        return Some(ProtocolType::Kitty);
+    }
+    if std::env::var("KITTY_WINDOW_ID").is_ok() {
+        return Some(ProtocolType::Kitty);
+    }
+
+    None
+}
+
+fn suppress_iterm_download_confirmation() {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let is_iterm = std::env::var("TERM_PROGRAM")
+        .map(|value| value.to_ascii_lowercase().contains("iterm"))
+        .unwrap_or(false)
+        || std::env::var("ITERM_SESSION_ID").is_ok();
+    if !is_iterm {
+        return;
+    }
+
+    for (key, value) in [
+        ("NoSyncSuppressDownloadConfirmation", "true"),
+        ("NoSyncAllowBigDownload", "true"),
+    ] {
+        let _ = Command::new("defaults")
+            .args(["write", "com.googlecode.iterm2", key, "-bool", value])
+            .status();
+    }
+}
+
 fn detect_rich_preview_picker() -> Option<Picker> {
     let mut picker = (0..3).find_map(|attempt| {
         if attempt > 0 {
@@ -72,6 +126,12 @@ fn detect_rich_preview_picker() -> Option<Picker> {
     if picker.protocol_type() == ProtocolType::Halfblocks && should_force_ghostty_kitty() {
         picker.set_protocol_type(ProtocolType::Kitty);
     }
+    if let Some(protocol) = forced_image_protocol_from_env() {
+        picker.set_protocol_type(protocol);
+    }
+    if picker.protocol_type() == ProtocolType::Iterm2 {
+        suppress_iterm_download_confirmation();
+    }
 
     (picker.protocol_type() != ProtocolType::Halfblocks).then_some(picker)
 }
@@ -79,7 +139,9 @@ fn detect_rich_preview_picker() -> Option<Picker> {
 fn load_preview_image(path: &Path) -> Result<DynamicImage, String> {
     match image::open(path) {
         Ok(img) => Ok(img),
-        Err(err) => load_preview_image_with_sips(path).ok_or_else(|| format!("decode failed: {err}")),
+        Err(err) => {
+            load_preview_image_with_sips(path).ok_or_else(|| format!("decode failed: {err}"))
+        }
     }
 }
 
@@ -119,7 +181,11 @@ fn rgba_to_color(pixel: image::Rgba<u8>) -> Color {
     }
 }
 
-fn render_terminal_preview(frame: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, preview: &TerminalPreview) {
+fn render_terminal_preview(
+    frame: &mut ratatui::Frame<'_>,
+    area: ratatui::layout::Rect,
+    preview: &TerminalPreview,
+) {
     if area.width == 0 || area.height == 0 {
         return;
     }
@@ -164,7 +230,10 @@ fn render_terminal_preview(frame: &mut ratatui::Frame<'_>, area: ratatui::layout
             } else {
                 DARK_BG
             };
-            spans.push(Span::styled("\u{2580}", Style::default().fg(top).bg(bottom)));
+            spans.push(Span::styled(
+                "\u{2580}",
+                Style::default().fg(top).bg(bottom),
+            ));
         }
         lines.push(Line::from(spans));
     }
@@ -199,26 +268,66 @@ const LOGO: [&str; 6] = [
 // ── Menu item icons by label prefix ─────────────────────────────────────────
 fn icon_for_item(label: &str) -> &'static str {
     let lower = label.to_lowercase();
-    if lower.starts_with("start battle") || lower.starts_with("rematch") { return "\u{2694} "; }
-    if lower.starts_with("choose new") { return "\u{1F3AF} "; }
-    if lower.starts_with("open") { return "\u{1F4C4} "; }
-    if lower.starts_with("share") { return "\u{1F4E4} "; }
-    if lower.starts_with("settings") { return "\u{2699} "; }
-    if lower.starts_with("star") { return "\u{2B50} "; }
-    if lower.starts_with("quit") || lower.starts_with("back") { return "\u{1F6AA} "; }
-    if lower.starts_with("judge") { return "\u{2696} "; }
-    if lower.starts_with("openai") { return "\u{1F511} "; }
-    if lower.starts_with("labels") { return "\u{1F3F7} "; }
-    if lower.starts_with("paste") { return "\u{1F4CB} "; }
-    if lower.starts_with("output") { return "\u{1F4C2} "; }
-    if lower.starts_with("aesthetic") { return "\u{1F3A8} "; }
-    if lower.starts_with("enter") || lower.starts_with("set") { return "\u{270F} "; }
-    if lower.starts_with("clear") { return "\u{1F5D1} "; }
-    if lower.starts_with("switch") { return "\u{1F500} "; }
-    if lower.starts_with("cancel") { return "\u{274C} "; }
-    if lower.starts_with("reset") { return "\u{1F504} "; }
-    if lower.starts_with("auto") { return "\u{26A1} "; }
-    if lower.starts_with("heuristic") { return "\u{1F9EA} "; }
+    if lower.starts_with("start battle") || lower.starts_with("rematch") {
+        return "\u{2694} ";
+    }
+    if lower.starts_with("choose new") {
+        return "\u{1F3AF} ";
+    }
+    if lower.starts_with("open") {
+        return "\u{1F4C4} ";
+    }
+    if lower.starts_with("share") {
+        return "\u{1F4E4} ";
+    }
+    if lower.starts_with("settings") {
+        return "\u{2699} ";
+    }
+    if lower.starts_with("star") {
+        return "\u{2B50} ";
+    }
+    if lower.starts_with("quit") || lower.starts_with("back") {
+        return "\u{1F6AA} ";
+    }
+    if lower.starts_with("judge") {
+        return "\u{2696} ";
+    }
+    if lower.starts_with("openai") {
+        return "\u{1F511} ";
+    }
+    if lower.starts_with("labels") {
+        return "\u{1F3F7} ";
+    }
+    if lower.starts_with("paste") {
+        return "\u{1F4CB} ";
+    }
+    if lower.starts_with("output") {
+        return "\u{1F4C2} ";
+    }
+    if lower.starts_with("aesthetic") {
+        return "\u{1F3A8} ";
+    }
+    if lower.starts_with("enter") || lower.starts_with("set") {
+        return "\u{270F} ";
+    }
+    if lower.starts_with("clear") {
+        return "\u{1F5D1} ";
+    }
+    if lower.starts_with("switch") {
+        return "\u{1F500} ";
+    }
+    if lower.starts_with("cancel") {
+        return "\u{274C} ";
+    }
+    if lower.starts_with("reset") {
+        return "\u{1F504} ";
+    }
+    if lower.starts_with("auto") {
+        return "\u{26A1} ";
+    }
+    if lower.starts_with("heuristic") {
+        return "\u{1F9EA} ";
+    }
     "\u{25B8} "
 }
 
@@ -230,7 +339,12 @@ impl TuiSession {
     fn new() -> Result<Self> {
         let mut stdout = io::stdout();
         enable_raw_mode()?;
-        execute!(stdout, EnterAlternateScreen, cursor::Hide, crossterm::event::EnableBracketedPaste)?;
+        execute!(
+            stdout,
+            EnterAlternateScreen,
+            cursor::Hide,
+            crossterm::event::EnableBracketedPaste
+        )?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
         Ok(Self { terminal })
@@ -240,7 +354,12 @@ impl TuiSession {
 impl Drop for TuiSession {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
-        let _ = execute!(self.terminal.backend_mut(), crossterm::event::DisableBracketedPaste, LeaveAlternateScreen, cursor::Show);
+        let _ = execute!(
+            self.terminal.backend_mut(),
+            crossterm::event::DisableBracketedPaste,
+            LeaveAlternateScreen,
+            cursor::Show
+        );
         let _ = self.terminal.show_cursor();
     }
 }
@@ -258,21 +377,35 @@ fn logo_gradient_color(row: usize) -> Color {
 }
 
 fn stat_bar_color(score: f32) -> Color {
-    if score >= 90.0 { NEON_GOLD }
-    else if score >= 75.0 { NEON_GREEN }
-    else if score >= 60.0 { NEON_CYAN }
-    else if score >= 45.0 { NEON_ORANGE }
-    else { NEON_RED }
+    if score >= 90.0 {
+        NEON_GOLD
+    } else if score >= 75.0 {
+        NEON_GREEN
+    } else if score >= 60.0 {
+        NEON_CYAN
+    } else if score >= 45.0 {
+        NEON_ORANGE
+    } else {
+        NEON_RED
+    }
 }
 
 fn score_rank(score: f32) -> (&'static str, Color) {
-    if score >= 95.0 { ("S+", Color::Rgb(255, 215, 0)) }
-    else if score >= 90.0 { ("S", Color::Rgb(255, 200, 60)) }
-    else if score >= 80.0 { ("A", NEON_GREEN) }
-    else if score >= 70.0 { ("B", NEON_CYAN) }
-    else if score >= 60.0 { ("C", NEON_ORANGE) }
-    else if score >= 50.0 { ("D", NEON_RED) }
-    else { ("F", Color::Rgb(180, 50, 50)) }
+    if score >= 95.0 {
+        ("S+", Color::Rgb(255, 215, 0))
+    } else if score >= 90.0 {
+        ("S", Color::Rgb(255, 200, 60))
+    } else if score >= 80.0 {
+        ("A", NEON_GREEN)
+    } else if score >= 70.0 {
+        ("B", NEON_CYAN)
+    } else if score >= 60.0 {
+        ("C", NEON_ORANGE)
+    } else if score >= 50.0 {
+        ("D", NEON_RED)
+    } else {
+        ("F", Color::Rgb(180, 50, 50))
+    }
 }
 
 // ── Game-style block builder ────────────────────────────────────────────────
@@ -281,7 +414,9 @@ fn game_block(title: &str, border_color: Color) -> Block<'_> {
         .borders(Borders::ALL)
         .title(Span::styled(
             format!(" {} ", title),
-            Style::default().fg(border_color).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
         ))
         .border_style(Style::default().fg(border_color))
 }
@@ -291,12 +426,19 @@ fn game_block_double(title: &str, border_color: Color) -> Block<'_> {
         .borders(Borders::ALL)
         .title(Span::styled(
             format!(" \u{25C6} {} \u{25C6} ", title),
-            Style::default().fg(border_color).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(border_color)
+                .add_modifier(Modifier::BOLD),
         ))
         .border_style(Style::default().fg(border_color))
 }
 
-pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index: usize) -> Result<Option<usize>> {
+pub fn select_menu(
+    title: &str,
+    subtitle: &[String],
+    items: &[String],
+    initial_index: usize,
+) -> Result<Option<usize>> {
     let mut session = TuiSession::new()?;
     let mut selected = initial_index.min(items.len().saturating_sub(1));
     let mut state = ListState::default();
@@ -313,31 +455,39 @@ pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_i
 
             // Dark background fill
             frame.render_widget(Clear, area);
-            frame.render_widget(
-                Block::default().style(Style::default().bg(DARK_BG)),
-                area,
-            );
+            frame.render_widget(Block::default().style(Style::default().bg(DARK_BG)), area);
 
             let is_home = title == "BetterThanYou";
             let logo_height = if is_home { 8u16 } else { 0 };
-            let subtitle_height = if subtitle.is_empty() { 0 } else { subtitle.len() as u16 + 2 };
+            let subtitle_height = if subtitle.is_empty() {
+                0
+            } else {
+                subtitle.len() as u16 + 2
+            };
 
             let sections = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(logo_height),             // logo or nothing
+                    Constraint::Length(logo_height),                  // logo or nothing
                     Constraint::Length(if !is_home { 3 } else { 0 }), // sub-page title
-                    Constraint::Length(subtitle_height),         // context info
-                    Constraint::Min(8),                         // menu items
-                    Constraint::Length(3),                       // footer/hotkeys
+                    Constraint::Length(subtitle_height),              // context info
+                    Constraint::Min(8),                               // menu items
+                    Constraint::Length(3),                            // footer/hotkeys
                 ])
                 .split(area);
 
             // ── Logo (home screen only) ────────────────────────────────
             if is_home {
-                let logo_lines: Vec<Line> = LOGO.iter().enumerate().map(|(i, line)| {
-                    Line::from(Span::styled(*line, Style::default().fg(logo_gradient_color(i))))
-                }).collect();
+                let logo_lines: Vec<Line> = LOGO
+                    .iter()
+                    .enumerate()
+                    .map(|(i, line)| {
+                        Line::from(Span::styled(
+                            *line,
+                            Style::default().fg(logo_gradient_color(i)),
+                        ))
+                    })
+                    .collect();
                 let logo = Paragraph::new(logo_lines)
                     .alignment(Alignment::Center)
                     .block(Block::default().style(Style::default().bg(DARK_BG)));
@@ -348,7 +498,10 @@ pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_i
             if !is_home {
                 let page_title = Paragraph::new(Line::from(vec![
                     Span::styled("\u{25C6} ", Style::default().fg(NEON_MAGENTA)),
-                    Span::styled(title, Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        title,
+                        Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD),
+                    ),
                     Span::styled(" \u{25C6}", Style::default().fg(NEON_MAGENTA)),
                 ]))
                 .alignment(Alignment::Center)
@@ -358,12 +511,15 @@ pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_i
 
             // ── Context/subtitle ───────────────────────────────────────
             if !subtitle.is_empty() {
-                let subtitle_lines: Vec<Line> = subtitle.iter().map(|line| {
-                    Line::from(vec![
-                        Span::styled("  \u{25B8} ", Style::default().fg(DIM_TEXT)),
-                        Span::styled(line.clone(), Style::default().fg(LIGHT_TEXT)),
-                    ])
-                }).collect();
+                let subtitle_lines: Vec<Line> = subtitle
+                    .iter()
+                    .map(|line| {
+                        Line::from(vec![
+                            Span::styled("  \u{25B8} ", Style::default().fg(DIM_TEXT)),
+                            Span::styled(line.clone(), Style::default().fg(LIGHT_TEXT)),
+                        ])
+                    })
+                    .collect();
                 let subtitle_widget = Paragraph::new(subtitle_lines)
                     .block(game_block("STATUS", NEON_CYAN))
                     .wrap(Wrap { trim: true });
@@ -401,17 +557,28 @@ pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_i
 
             // ── Footer/hotkeys ─────────────────────────────────────────
             let footer = Paragraph::new(Line::from(vec![
-                Span::styled(" \u{2191}\u{2193}", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " \u{2191}\u{2193}",
+                    Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Navigate  ", Style::default().fg(DIM_TEXT)),
-                Span::styled("\u{23CE}", Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "\u{23CE}",
+                    Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Select  ", Style::default().fg(DIM_TEXT)),
-                Span::styled("ESC", Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "ESC",
+                    Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Back", Style::default().fg(DIM_TEXT)),
             ]))
             .alignment(Alignment::Center)
-            .block(Block::default()
-                .borders(Borders::TOP)
-                .border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+            );
             frame.render_widget(footer, sections[4]);
         })?;
 
@@ -438,7 +605,6 @@ pub fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_i
     }
 }
 
-
 // ── VS Header ───────────────────────────────────────────────────────────────
 fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
     let winner_side = if result.winner.id == "left" { "L" } else { "R" };
@@ -450,7 +616,9 @@ fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
         Line::from(vec![
             Span::styled(
                 format!("  {} ", result.inputs.left.label.to_uppercase()),
-                Style::default().fg(NEON_ORANGE).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(NEON_ORANGE)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 format!("[{:.1}]", result.scores.left.total),
@@ -458,15 +626,21 @@ fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
             ),
             Span::styled(
                 format!(" {} ", left_rank),
-                Style::default().fg(left_rank_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(left_rank_color)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 "   \u{2694} VS \u{2694}   ",
-                Style::default().fg(NEON_MAGENTA).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(NEON_MAGENTA)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 format!(" {} ", right_rank),
-                Style::default().fg(right_rank_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(right_rank_color)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 format!("[{:.1}]", result.scores.right.total),
@@ -479,21 +653,24 @@ fn vs_header<'a>(result: &BattleResult) -> Vec<Line<'a>> {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  \u{1F3C6} WINNER: ", Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  \u{1F3C6} WINNER: ",
+                Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 format!("{} ", result.winner.label.to_uppercase()),
                 Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                format!("({})", winner_side),
-                Style::default().fg(DIM_TEXT),
-            ),
+            Span::styled(format!("({})", winner_side), Style::default().fg(DIM_TEXT)),
             Span::styled(
                 format!("  \u{25B2} +{:.1} margin", result.winner.margin),
                 Style::default().fg(NEON_GREEN),
             ),
             if result.winner.decisive {
-                Span::styled("  DECISIVE!", Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD))
+                Span::styled(
+                    "  DECISIVE!",
+                    Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
+                )
             } else {
                 Span::styled("  close match", Style::default().fg(DIM_TEXT))
             },
@@ -513,7 +690,11 @@ pub enum BattleViewExit {
 }
 
 // ── Battle view (game-style) ────────────────────────────────────────────────
-pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _footer_lines: &[String]) -> Result<BattleViewExit> {
+pub fn present_battle_view(
+    result: &BattleResult,
+    _artifacts: &SavedArtifacts,
+    _footer_lines: &[String],
+) -> Result<BattleViewExit> {
     // Detect terminal image protocol BEFORE entering alternate screen so the
     // photos render with the best available format (kitty/iTerm/sixel/halfblocks).
     //
@@ -529,8 +710,10 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
             Picker::from_query_stdio().ok()
         })
         .unwrap_or_else(Picker::halfblocks);
-    let mut left_proto = try_load_preview_from_data_url(&result.inputs.left.image_data_url, &mut picker);
-    let mut right_proto = try_load_preview_from_data_url(&result.inputs.right.image_data_url, &mut picker);
+    let mut left_proto =
+        try_load_preview_from_data_url(&result.inputs.left.image_data_url, &mut picker);
+    let mut right_proto =
+        try_load_preview_from_data_url(&result.inputs.right.image_data_url, &mut picker);
 
     let mut session = TuiSession::new()?;
     let mut scroll: u16 = 0;
@@ -546,13 +729,14 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
 
             // Dark background
             frame.render_widget(Clear, area);
-            frame.render_widget(
-                Block::default().style(Style::default().bg(DARK_BG)),
-                area,
-            );
+            frame.render_widget(Block::default().style(Style::default().bg(DARK_BG)), area);
 
             let axis_count = result.axis_cards.len();
-            let has_dual = result.dual_scores.as_ref().and_then(|d| d.vlm.as_ref()).is_some();
+            let has_dual = result
+                .dual_scores
+                .as_ref()
+                .and_then(|d| d.vlm.as_ref())
+                .is_some();
             let dual_height: u16 = if has_dual { 4 } else { 0 };
             // Compact: 1 line per axis + 2 for borders
             let stat_height = (axis_count as u16) + 2;
@@ -560,18 +744,17 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
             // Show thumbnails whenever the pane has enough spare rows instead
             // of requiring a full-height terminal. cmux panes are often 30-35
             // rows tall, so the old hard 40-row cutoff hid previews entirely.
-            let photo_height: u16 =
-                battle_view_photo_height(area.height, stat_height, dual_height);
+            let photo_height: u16 = battle_view_photo_height(area.height, stat_height, dual_height);
 
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(6),                    // VS header
-                    Constraint::Length(photo_height),         // portraits row
-                    Constraint::Length(dual_height),          // dual-score bar (optional)
-                    Constraint::Length(stat_height),          // side-by-side stats
-                    Constraint::Min(5),                       // analysis (scrollable)
-                    Constraint::Length(3),                    // footer/hotkeys
+                    Constraint::Length(6),            // VS header
+                    Constraint::Length(photo_height), // portraits row
+                    Constraint::Length(dual_height),  // dual-score bar (optional)
+                    Constraint::Length(stat_height),  // side-by-side stats
+                    Constraint::Min(5),               // analysis (scrollable)
+                    Constraint::Length(3),            // footer/hotkeys
                 ])
                 .split(area);
 
@@ -586,7 +769,9 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
                     .border_style(Style::default().fg(NEON_ORANGE))
                     .title(Span::styled(
                         format!(" \u{1F7E0} {} ", result.inputs.left.label),
-                        Style::default().fg(NEON_ORANGE).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(NEON_ORANGE)
+                            .add_modifier(Modifier::BOLD),
                     ));
                 let left_inner = left_block.inner(photo_cols[0]);
                 frame.render_widget(left_block, photo_cols[0]);
@@ -621,20 +806,34 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
                 if let Some(dual) = result.dual_scores.as_ref() {
                     let mut dual_lines: Vec<Line> = Vec::new();
                     dual_lines.push(Line::from(vec![
-                        Span::styled("  \u{2699} HEURISTIC  ", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
                         Span::styled(
-                            format!("{} {:.1}", result.inputs.left.label, dual.heuristic.left.total),
+                            "  \u{2699} HEURISTIC  ",
+                            Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!(
+                                "{} {:.1}",
+                                result.inputs.left.label, dual.heuristic.left.total
+                            ),
                             Style::default().fg(NEON_ORANGE),
                         ),
                         Span::styled("  vs  ", Style::default().fg(DIM_TEXT)),
                         Span::styled(
-                            format!("{} {:.1}", result.inputs.right.label, dual.heuristic.right.total),
+                            format!(
+                                "{} {:.1}",
+                                result.inputs.right.label, dual.heuristic.right.total
+                            ),
                             Style::default().fg(NEON_BLUE),
                         ),
                     ]));
                     if let Some(vlm) = dual.vlm.as_ref() {
                         dual_lines.push(Line::from(vec![
-                            Span::styled("  \u{2726} AI JUDGE   ", Style::default().fg(NEON_PURPLE).add_modifier(Modifier::BOLD)),
+                            Span::styled(
+                                "  \u{2726} AI JUDGE   ",
+                                Style::default()
+                                    .fg(NEON_PURPLE)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
                             Span::styled(
                                 format!("{} {:.1}", result.inputs.left.label, vlm.left.total),
                                 Style::default().fg(NEON_ORANGE),
@@ -646,10 +845,15 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
                             ),
                         ]));
                     }
-                    let dual_panel = Paragraph::new(dual_lines)
-                        .block(Block::default().borders(Borders::ALL)
-                            .title(Span::styled(" DUAL SCORE ", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)))
-                            .border_style(Style::default().fg(NEON_CYAN)));
+                    let dual_panel = Paragraph::new(dual_lines).block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(Span::styled(
+                                " DUAL SCORE ",
+                                Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                            ))
+                            .border_style(Style::default().fg(NEON_CYAN)),
+                    );
                     frame.render_widget(dual_panel, layout[2]);
                 }
             }
@@ -657,7 +861,11 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
             // ── Side-by-side stat comparison (compact 1-line-per-axis) ─
             let stat_cols = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(45), Constraint::Percentage(10), Constraint::Percentage(45)])
+                .constraints([
+                    Constraint::Percentage(45),
+                    Constraint::Percentage(10),
+                    Constraint::Percentage(45),
+                ])
                 .split(layout[3]);
 
             // Resolve UI language from the battle result (falls back to English)
@@ -669,29 +877,59 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
 
             // Left stats
             let left_is_winner = result.winner.id == "left";
-            let left_title = format!(" {} {:.1} ", result.inputs.left.label, result.scores.left.total);
-            let left_border = if left_is_winner { NEON_GOLD } else { NEON_ORANGE };
+            let left_title = format!(
+                " {} {:.1} ",
+                result.inputs.left.label, result.scores.left.total
+            );
+            let left_border = if left_is_winner {
+                NEON_GOLD
+            } else {
+                NEON_ORANGE
+            };
             let mut left_stat_lines: Vec<Line> = Vec::new();
             for card in &result.axis_cards {
                 let bar_w = stat_cols[0].width.saturating_sub(22) as usize;
                 let filled = ((card.left / 100.0) * bar_w as f32).round() as usize;
                 let empty = bar_w.saturating_sub(filled);
                 let won_axis = card.leader == "left";
-                let bar_color = if won_axis { NEON_GREEN } else { stat_bar_color(card.left) };
-                let indicator = if won_axis { "\u{25B2}" } else if card.leader == "tie" { "=" } else { " " };
+                let bar_color = if won_axis {
+                    NEON_GREEN
+                } else {
+                    stat_bar_color(card.left)
+                };
+                let indicator = if won_axis {
+                    "\u{25B2}"
+                } else if card.leader == "tie" {
+                    "="
+                } else {
+                    " "
+                };
                 // Use short localized label (e.g. "SYM", "SKIN", "대칭", "피부")
                 let short = localized_axis_short(ui_lang, &card.key);
                 left_stat_lines.push(Line::from(vec![
                     Span::styled(format!(" {:<8}", short), Style::default().fg(NEON_GOLD)),
                     Span::styled("\u{2588}".repeat(filled), Style::default().fg(bar_color)),
-                    Span::styled("\u{2591}".repeat(empty), Style::default().fg(Color::Rgb(40, 40, 60))),
-                    Span::styled(format!(" {:>5.1} {}", card.left, indicator), Style::default().fg(if won_axis { NEON_GREEN } else { LIGHT_TEXT })),
+                    Span::styled(
+                        "\u{2591}".repeat(empty),
+                        Style::default().fg(Color::Rgb(40, 40, 60)),
+                    ),
+                    Span::styled(
+                        format!(" {:>5.1} {}", card.left, indicator),
+                        Style::default().fg(if won_axis { NEON_GREEN } else { LIGHT_TEXT }),
+                    ),
                 ]));
             }
-            let left_panel = Paragraph::new(left_stat_lines)
-                .block(Block::default().borders(Borders::ALL)
-                    .title(Span::styled(left_title, Style::default().fg(left_border).add_modifier(Modifier::BOLD)))
-                    .border_style(Style::default().fg(left_border)));
+            let left_panel = Paragraph::new(left_stat_lines).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(Span::styled(
+                        left_title,
+                        Style::default()
+                            .fg(left_border)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .border_style(Style::default().fg(left_border)),
+            );
             frame.render_widget(left_panel, stat_cols[0]);
 
             // VS column (gap indicators)
@@ -715,45 +953,84 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
 
             // Right stats
             let right_is_winner = result.winner.id == "right";
-            let right_title = format!(" {} {:.1} ", result.inputs.right.label, result.scores.right.total);
-            let right_border = if right_is_winner { NEON_GOLD } else { NEON_BLUE };
+            let right_title = format!(
+                " {} {:.1} ",
+                result.inputs.right.label, result.scores.right.total
+            );
+            let right_border = if right_is_winner {
+                NEON_GOLD
+            } else {
+                NEON_BLUE
+            };
             let mut right_stat_lines: Vec<Line> = Vec::new();
             for card in &result.axis_cards {
                 let bar_w = stat_cols[2].width.saturating_sub(22) as usize;
                 let filled = ((card.right / 100.0) * bar_w as f32).round() as usize;
                 let empty = bar_w.saturating_sub(filled);
                 let won_axis = card.leader == "right";
-                let bar_color = if won_axis { NEON_GREEN } else { stat_bar_color(card.right) };
-                let indicator = if won_axis { "\u{25B2}" } else if card.leader == "tie" { "=" } else { " " };
+                let bar_color = if won_axis {
+                    NEON_GREEN
+                } else {
+                    stat_bar_color(card.right)
+                };
+                let indicator = if won_axis {
+                    "\u{25B2}"
+                } else if card.leader == "tie" {
+                    "="
+                } else {
+                    " "
+                };
                 let short = localized_axis_short(ui_lang, &card.key);
                 right_stat_lines.push(Line::from(vec![
                     Span::styled(format!(" {:<8}", short), Style::default().fg(NEON_GOLD)),
                     Span::styled("\u{2588}".repeat(filled), Style::default().fg(bar_color)),
-                    Span::styled("\u{2591}".repeat(empty), Style::default().fg(Color::Rgb(40, 40, 60))),
-                    Span::styled(format!(" {:>5.1} {}", card.right, indicator), Style::default().fg(if won_axis { NEON_GREEN } else { LIGHT_TEXT })),
+                    Span::styled(
+                        "\u{2591}".repeat(empty),
+                        Style::default().fg(Color::Rgb(40, 40, 60)),
+                    ),
+                    Span::styled(
+                        format!(" {:>5.1} {}", card.right, indicator),
+                        Style::default().fg(if won_axis { NEON_GREEN } else { LIGHT_TEXT }),
+                    ),
                 ]));
             }
-            let right_panel = Paragraph::new(right_stat_lines)
-                .block(Block::default().borders(Borders::ALL)
-                    .title(Span::styled(right_title, Style::default().fg(right_border).add_modifier(Modifier::BOLD)))
-                    .border_style(Style::default().fg(right_border)));
+            let right_panel = Paragraph::new(right_stat_lines).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(Span::styled(
+                        right_title,
+                        Style::default()
+                            .fg(right_border)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .border_style(Style::default().fg(right_border)),
+            );
             frame.render_widget(right_panel, stat_cols[2]);
 
             // ── Analysis notes ─────────────────────────────────────────
             let analysis = vec![
                 Line::from(vec![
                     Span::styled("  \u{1F4AC} ", Style::default().fg(NEON_CYAN)),
-                    Span::styled(result.sections.overall_take.clone(), Style::default().fg(LIGHT_TEXT)),
+                    Span::styled(
+                        result.sections.overall_take.clone(),
+                        Style::default().fg(LIGHT_TEXT),
+                    ),
                 ]),
                 Line::from(""),
                 Line::from(vec![
                     Span::styled("  \u{1F3C6} Why: ", Style::default().fg(NEON_GOLD)),
-                    Span::styled(result.sections.why_this_won.clone(), Style::default().fg(LIGHT_TEXT)),
+                    Span::styled(
+                        result.sections.why_this_won.clone(),
+                        Style::default().fg(LIGHT_TEXT),
+                    ),
                 ]),
                 Line::from(""),
                 Line::from(vec![
                     Span::styled("  \u{1F4DD} Notes: ", Style::default().fg(NEON_PURPLE)),
-                    Span::styled(result.sections.model_jury_notes.clone(), Style::default().fg(DIM_TEXT)),
+                    Span::styled(
+                        result.sections.model_jury_notes.clone(),
+                        Style::default().fg(DIM_TEXT),
+                    ),
                 ]),
             ];
             // Scrollable analysis panel — vertical offset is `scroll`.
@@ -761,7 +1038,9 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
                 .borders(Borders::ALL)
                 .title(Span::styled(
                     " JUDGE ANALYSIS ",
-                    Style::default().fg(NEON_PURPLE).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(NEON_PURPLE)
+                        .add_modifier(Modifier::BOLD),
                 ))
                 .border_style(Style::default().fg(NEON_PURPLE));
             let analysis_paragraph = Paragraph::new(analysis)
@@ -772,21 +1051,38 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
 
             // ── Footer/hotkeys ─────────────────────────────────────────
             let footer = Paragraph::new(Line::from(vec![
-                Span::styled(" \u{23CE}", Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " \u{23CE}",
+                    Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("/", Style::default().fg(DIM_TEXT)),
-                Span::styled("q", Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "q",
+                    Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Return  ", Style::default().fg(DIM_TEXT)),
-                Span::styled("o", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "o",
+                    Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Open Report  ", Style::default().fg(DIM_TEXT)),
-                Span::styled("\u{2191}\u{2193}", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "\u{2191}\u{2193}",
+                    Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("/", Style::default().fg(DIM_TEXT)),
-                Span::styled("j/k", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "j/k",
+                    Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Scroll", Style::default().fg(DIM_TEXT)),
             ]))
             .alignment(Alignment::Center)
-            .block(Block::default()
-                .borders(Borders::TOP)
-                .border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+            );
             frame.render_widget(footer, layout[5]);
         })?;
 
@@ -796,7 +1092,9 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
             }
             match key.code {
                 KeyCode::Char('o') => return Ok(BattleViewExit::OpenRequest),
-                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => return Ok(BattleViewExit::Quit),
+                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter => {
+                    return Ok(BattleViewExit::Quit)
+                }
                 KeyCode::Up | KeyCode::Char('k') => {
                     scroll = scroll.saturating_sub(1);
                 }
@@ -824,7 +1122,12 @@ pub fn present_battle_view(result: &BattleResult, _artifacts: &SavedArtifacts, _
 
 /// Shows a TUI text input screen. Returns Some(value) on Enter, None on Esc.
 /// If the user presses Enter with empty input, returns Some("").
-pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Result<Option<String>> {
+pub fn text_input(
+    title: &str,
+    hint: &str,
+    initial: &str,
+    is_secret: bool,
+) -> Result<Option<String>> {
     let mut session = TuiSession::new()?;
     let mut input = initial.to_string();
 
@@ -841,12 +1144,12 @@ pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Re
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Min(3),      // top spacer
-                    Constraint::Length(3),    // title
-                    Constraint::Length(3),    // hint
-                    Constraint::Length(5),    // input box
-                    Constraint::Length(3),    // hotkeys
-                    Constraint::Min(3),      // bottom spacer
+                    Constraint::Min(3),    // top spacer
+                    Constraint::Length(3), // title
+                    Constraint::Length(3), // hint
+                    Constraint::Length(5), // input box
+                    Constraint::Length(3), // hotkeys
+                    Constraint::Min(3),    // bottom spacer
                 ])
                 .split(area);
 
@@ -878,14 +1181,18 @@ pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Re
 
             let title_widget = Paragraph::new(Line::from(vec![
                 Span::styled("\u{25C6} ", Style::default().fg(NEON_MAGENTA)),
-                Span::styled(title, Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    title,
+                    Style::default().fg(NEON_GOLD).add_modifier(Modifier::BOLD),
+                ),
             ]))
             .alignment(Alignment::Center);
             frame.render_widget(title_widget, center[1]);
 
             if !hint.is_empty() {
                 let hint_widget = Paragraph::new(Line::from(Span::styled(
-                    hint, Style::default().fg(DIM_TEXT),
+                    hint,
+                    Style::default().fg(DIM_TEXT),
                 )))
                 .alignment(Alignment::Center);
                 frame.render_widget(hint_widget, center_hint[1]);
@@ -907,29 +1214,45 @@ pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Re
             frame.render_widget(input_widget, center_input[1]);
 
             let footer = Paragraph::new(Line::from(vec![
-                Span::styled(" \u{23CE}", Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " \u{23CE}",
+                    Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Confirm  ", Style::default().fg(DIM_TEXT)),
-                Span::styled("ESC", Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "ESC",
+                    Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Cancel", Style::default().fg(DIM_TEXT)),
             ]))
             .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+            );
             frame.render_widget(footer, layout[4]);
         })?;
 
         match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => {
-                match key.code {
-                    KeyCode::Enter => return Ok(Some(input)),
-                    KeyCode::Esc => return Ok(None),
-                    KeyCode::Backspace => { input.pop(); }
-                    KeyCode::Char(c) => { input.push(c); }
-                    _ => {}
+            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
+                KeyCode::Enter => return Ok(Some(input)),
+                KeyCode::Esc => return Ok(None),
+                KeyCode::Backspace => {
+                    input.pop();
                 }
-            }
+                KeyCode::Char(c) => {
+                    input.push(c);
+                }
+                _ => {}
+            },
             Event::Paste(text) => {
                 let cleaned = text.replace('\n', "").replace('\r', "").trim().to_string();
-                if cleaned.starts_with('/') || cleaned.starts_with('~') || cleaned.starts_with("http") || cleaned.starts_with("data:") {
+                if cleaned.starts_with('/')
+                    || cleaned.starts_with('~')
+                    || cleaned.starts_with("http")
+                    || cleaned.starts_with("data:")
+                {
                     input = cleaned;
                 } else {
                     input.push_str(&cleaned);
@@ -941,7 +1264,8 @@ pub fn text_input(title: &str, hint: &str, initial: &str, is_secret: bool) -> Re
 }
 
 fn clean_path(input: &str) -> String {
-    let mut s = input.trim()
+    let mut s = input
+        .trim()
         .trim_matches('\'')
         .trim_matches('"')
         .trim()
@@ -958,7 +1282,8 @@ fn clean_path(input: &str) -> String {
     }
 
     // macOS drag-and-drop escapes spaces with backslash: /path/to/my\ file.jpg
-    s = s.replace("\\ ", " ")
+    s = s
+        .replace("\\ ", " ")
         .replace("\\(", "(")
         .replace("\\)", ")")
         .replace("\\[", "[")
@@ -1089,17 +1414,27 @@ fn try_apply_cmux_clipboard_source(
     }
 }
 
-fn try_load_preview(path: &str, rich_picker: Option<&Picker>) -> Result<Option<TerminalPreview>, String> {
+fn try_load_preview(
+    path: &str,
+    rich_picker: Option<&Picker>,
+) -> Result<Option<TerminalPreview>, String> {
     let cleaned = clean_path(path);
-    if cleaned.is_empty() { return Ok(None); }
+    if cleaned.is_empty() {
+        return Ok(None);
+    }
     let p = std::path::Path::new(&cleaned);
-    if !p.exists() { return Ok(None); }
+    if !p.exists() {
+        return Ok(None);
+    }
     let image = load_preview_image(p)?;
     let protocol = rich_picker.map(|picker| picker.new_resize_protocol(image.clone()));
     Ok(Some(TerminalPreview { image, protocol }))
 }
 
-pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&str>) -> Result<Option<(String, String)>> {
+pub fn battle_input_screen(
+    existing_left: Option<&str>,
+    existing_right: Option<&str>,
+) -> Result<Option<(String, String)>> {
     let mut session = TuiSession::new()?;
     let rich_preview_picker = detect_rich_preview_picker();
     let mut left_input = existing_left.unwrap_or("").to_string();
@@ -1158,9 +1493,9 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(if cmux_clipboard_bridge { 5 } else { 4 }),   // title
-                    Constraint::Min(10),     // split panels
-                    Constraint::Length(3),   // hotkeys
+                    Constraint::Length(if cmux_clipboard_bridge { 5 } else { 4 }), // title
+                    Constraint::Min(10),                                           // split panels
+                    Constraint::Length(3),                                         // hotkeys
                 ])
                 .split(area);
 
@@ -1168,7 +1503,9 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
             let mut title_lines = vec![
                 Line::from(Span::styled(
                     "\u{2694}  BATTLE SETUP  \u{2694}",
-                    Style::default().fg(NEON_MAGENTA).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(NEON_MAGENTA)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(Span::styled(
                     "Paste or drag portrait file paths into each side",
@@ -1182,8 +1519,8 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                 )));
             }
             let title = Paragraph::new(title_lines)
-            .alignment(Alignment::Center)
-            .block(game_block_double("PORTRAIT INPUT", NEON_MAGENTA));
+                .alignment(Alignment::Center)
+                .block(game_block_double("PORTRAIT INPUT", NEON_MAGENTA));
             frame.render_widget(title, layout[0]);
 
             // Split panels
@@ -1198,13 +1535,24 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                 let input = if is_left { &left_input } else { &right_input };
                 let is_active = active_side == side;
                 let accent = if is_left { NEON_ORANGE } else { NEON_BLUE };
-                let border_color = if is_active { accent } else { Color::Rgb(60, 60, 80) };
+                let border_color = if is_active {
+                    accent
+                } else {
+                    Color::Rgb(60, 60, 80)
+                };
                 let cursor_char = if is_active { "\u{2588}" } else { "" };
-                let label = if is_left { " \u{1F7E0} LEFT " } else { " \u{1F535} RIGHT " };
+                let label = if is_left {
+                    " \u{1F7E0} LEFT "
+                } else {
+                    " \u{1F535} RIGHT "
+                };
 
                 let block = Block::default()
                     .borders(Borders::ALL)
-                    .title(Span::styled(label, Style::default().fg(accent).add_modifier(Modifier::BOLD)))
+                    .title(Span::styled(
+                        label,
+                        Style::default().fg(accent).add_modifier(Modifier::BOLD),
+                    ))
                     .border_style(Style::default().fg(border_color));
                 let inner = block.inner(*panel_area);
                 frame.render_widget(block, *panel_area);
@@ -1216,8 +1564,16 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     .split(inner);
 
                 // Image preview area
-                let preview = if is_left { &mut left_preview } else { &mut right_preview };
-                let preview_error = if is_left { &left_preview_error } else { &right_preview_error };
+                let preview = if is_left {
+                    &mut left_preview
+                } else {
+                    &mut right_preview
+                };
+                let preview_error = if is_left {
+                    &left_preview_error
+                } else {
+                    &right_preview_error
+                };
                 if let Some(preview) = preview.as_mut() {
                     if let Some(protocol) = preview.protocol.as_mut() {
                         let img_widget = StatefulImage::new();
@@ -1235,32 +1591,54 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     let ph_lines = if input.trim().is_empty() {
                         vec![
                             Line::from(""),
-                            Line::from(Span::styled("Drag & drop or paste", Style::default().fg(DIM_TEXT))),
-                            Line::from(Span::styled("an image file here", Style::default().fg(DIM_TEXT))),
+                            Line::from(Span::styled(
+                                "Drag & drop or paste",
+                                Style::default().fg(DIM_TEXT),
+                            )),
+                            Line::from(Span::styled(
+                                "an image file here",
+                                Style::default().fg(DIM_TEXT),
+                            )),
                         ]
                     } else if file_exists {
                         let detail = preview_error
                             .as_deref()
                             .map(|value| {
-                                if value.len() > 34 { format!("...{}", &value[value.len()-32..]) } else { value.to_string() }
+                                if value.len() > 34 {
+                                    format!("...{}", &value[value.len() - 32..])
+                                } else {
+                                    value.to_string()
+                                }
                             })
                             .unwrap_or_else(|| "unknown decode error".to_string());
                         vec![
-                            Line::from(Span::styled("\u{2714} File found", Style::default().fg(NEON_GREEN))),
-                            Line::from(Span::styled("Preview decode failed:", Style::default().fg(DIM_TEXT))),
+                            Line::from(Span::styled(
+                                "\u{2714} File found",
+                                Style::default().fg(NEON_GREEN),
+                            )),
+                            Line::from(Span::styled(
+                                "Preview decode failed:",
+                                Style::default().fg(DIM_TEXT),
+                            )),
                             Line::from(Span::styled(detail, Style::default().fg(DIM_TEXT))),
                         ]
                     } else {
                         vec![
-                            Line::from(Span::styled("Path not found:", Style::default().fg(NEON_RED))),
                             Line::from(Span::styled(
-                                if cleaned.len() > 30 { format!("...{}", &cleaned[cleaned.len()-28..]) } else { cleaned },
+                                "Path not found:",
+                                Style::default().fg(NEON_RED),
+                            )),
+                            Line::from(Span::styled(
+                                if cleaned.len() > 30 {
+                                    format!("...{}", &cleaned[cleaned.len() - 28..])
+                                } else {
+                                    cleaned
+                                },
                                 Style::default().fg(DIM_TEXT),
                             )),
                         ]
                     };
-                    let ph = Paragraph::new(ph_lines)
-                    .alignment(Alignment::Center);
+                    let ph = Paragraph::new(ph_lines).alignment(Alignment::Center);
                     frame.render_widget(ph, inner_layout[0]);
                 }
 
@@ -1275,7 +1653,10 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     format!(" {}", cursor_char)
                 } else {
                     let truncated = if input.len() > max_w.saturating_sub(4) {
-                        format!("...{}", &input[input.len().saturating_sub(max_w.saturating_sub(6))..])
+                        format!(
+                            "...{}",
+                            &input[input.len().saturating_sub(max_w.saturating_sub(6))..]
+                        )
                     } else {
                         input.clone()
                     };
@@ -1283,25 +1664,58 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                 };
                 let input_widget = Paragraph::new(vec![
                     Line::from(status),
-                    Line::from(Span::styled(display, Style::default().fg(if is_active { NEON_GOLD } else { LIGHT_TEXT }))),
+                    Line::from(Span::styled(
+                        display,
+                        Style::default().fg(if is_active { NEON_GOLD } else { LIGHT_TEXT }),
+                    )),
                 ])
-                .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
+                .block(
+                    Block::default()
+                        .borders(Borders::TOP)
+                        .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+                );
                 frame.render_widget(input_widget, inner_layout[1]);
             }
 
             // Hotkeys
             let both_ready = !left_input.trim().is_empty() && !right_input.trim().is_empty();
-            let enter_color = if both_ready { NEON_GREEN } else { Color::Rgb(50, 50, 50) };
+            let enter_color = if both_ready {
+                NEON_GREEN
+            } else {
+                Color::Rgb(50, 50, 50)
+            };
             let footer = Paragraph::new(Line::from(vec![
-                Span::styled(" TAB", Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " TAB",
+                    Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Switch  ", Style::default().fg(DIM_TEXT)),
-                Span::styled("\u{23CE}", Style::default().fg(enter_color).add_modifier(Modifier::BOLD)),
-                Span::styled(if both_ready { " Battle!  " } else { " (fill both)  " }, Style::default().fg(DIM_TEXT)),
-                Span::styled("ESC", Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "\u{23CE}",
+                    Style::default()
+                        .fg(enter_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    if both_ready {
+                        " Battle!  "
+                    } else {
+                        " (fill both)  "
+                    },
+                    Style::default().fg(DIM_TEXT),
+                ),
+                Span::styled(
+                    "ESC",
+                    Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" Back", Style::default().fg(DIM_TEXT)),
             ]))
             .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+            );
             frame.render_widget(footer, layout[2]);
         })?;
 
@@ -1326,30 +1740,40 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
         }
 
         match next_event {
-            Some(Event::Key(key)) if key.kind == KeyEventKind::Press => {
-                match key.code {
-                    KeyCode::Tab | KeyCode::BackTab => {
+            Some(Event::Key(key)) if key.kind == KeyEventKind::Press => match key.code {
+                KeyCode::Tab | KeyCode::BackTab => {
+                    active_side = 1 - active_side;
+                }
+                KeyCode::Enter => {
+                    if !left_input.trim().is_empty() && !right_input.trim().is_empty() {
+                        return Ok(Some((clean_path(&left_input), clean_path(&right_input))));
+                    }
+                    let current = if active_side == 0 {
+                        &left_input
+                    } else {
+                        &right_input
+                    };
+                    if !current.trim().is_empty() {
                         active_side = 1 - active_side;
                     }
-                    KeyCode::Enter => {
-                        if !left_input.trim().is_empty() && !right_input.trim().is_empty() {
-                            return Ok(Some((clean_path(&left_input), clean_path(&right_input))));
-                        }
-                        let current = if active_side == 0 { &left_input } else { &right_input };
-                        if !current.trim().is_empty() {
-                            active_side = 1 - active_side;
-                        }
-                    }
-                    KeyCode::Esc => return Ok(None),
-                    KeyCode::Backspace => {
-                        if active_side == 0 { left_input.pop(); } else { right_input.pop(); }
-                    }
-                    KeyCode::Char(c) => {
-                        if active_side == 0 { left_input.push(c); } else { right_input.push(c); }
-                    }
-                    _ => {}
                 }
-            }
+                KeyCode::Esc => return Ok(None),
+                KeyCode::Backspace => {
+                    if active_side == 0 {
+                        left_input.pop();
+                    } else {
+                        right_input.pop();
+                    }
+                }
+                KeyCode::Char(c) => {
+                    if active_side == 0 {
+                        left_input.push(c);
+                    } else {
+                        right_input.push(c);
+                    }
+                }
+                _ => {}
+            },
             // Handle paste events (multi-char, e.g. drag-and-drop paths)
             Some(Event::Paste(text)) => {
                 let cleaned = text.replace('\n', "").replace('\r', "").trim().to_string();
@@ -1362,9 +1786,17 @@ pub fn battle_input_screen(existing_left: Option<&str>, existing_right: Option<&
                     || cleaned.starts_with('\'')
                     || cleaned.starts_with('"');
                 if active_side == 0 {
-                    if is_path { left_input = cleaned; } else { left_input.push_str(&cleaned); }
+                    if is_path {
+                        left_input = cleaned;
+                    } else {
+                        left_input.push_str(&cleaned);
+                    }
                 } else {
-                    if is_path { right_input = cleaned; } else { right_input.push_str(&cleaned); }
+                    if is_path {
+                        right_input = cleaned;
+                    } else {
+                        right_input.push_str(&cleaned);
+                    }
                 }
             }
             _ => {}
@@ -1398,18 +1830,54 @@ mod tests {
         if let Some(home) = std::env::var_os("HOME") {
             assert_eq!(
                 clean_path("~/portrait.png"),
-                PathBuf::from(home).join("portrait.png").display().to_string()
+                PathBuf::from(home)
+                    .join("portrait.png")
+                    .display()
+                    .to_string()
             );
         }
+    }
+
+    #[test]
+    fn input_preview_keeps_original_image_for_rich_protocols() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("preview.png");
+        let mut image = RgbaImage::new(8, 8);
+        for pixel in image.pixels_mut() {
+            *pixel = image::Rgba([255, 143, 66, 255]);
+        }
+        image.save(&path).unwrap();
+
+        let preview = try_load_preview(path.to_str().unwrap(), None)
+            .unwrap()
+            .unwrap();
+        assert!(preview.protocol.is_none());
+        assert_eq!(preview.image.dimensions(), (8, 8));
+    }
+
+    #[test]
+    fn explicit_image_protocol_can_force_original_rendering() {
+        std::env::set_var("BTYU_IMAGE_PROTOCOL", "iterm2");
+        let protocol = forced_image_protocol_from_env();
+        std::env::remove_var("BTYU_IMAGE_PROTOCOL");
+
+        assert!(matches!(protocol, Some(ProtocolType::Iterm2)));
+    }
+
+    #[test]
+    fn iterm_confirmation_suppression_is_safe_outside_iterm() {
+        suppress_iterm_download_confirmation();
     }
 }
 
 // ── Battle Loading Animation (while VLM analyzes) ───────────────────────────
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-const SPINNER_FRAMES: [&str; 8] = ["\u{28F7}", "\u{28EF}", "\u{28DF}", "\u{287F}", "\u{28BF}", "\u{28FB}", "\u{28FD}", "\u{28FE}"];
+const SPINNER_FRAMES: [&str; 8] = [
+    "\u{28F7}", "\u{28EF}", "\u{28DF}", "\u{287F}", "\u{28BF}", "\u{28FB}", "\u{28FD}", "\u{28FE}",
+];
 
 const BATTLE_PHRASES: [&str; 8] = [
     "Analyzing portraits...",
@@ -1447,9 +1915,9 @@ pub fn battle_loading_screen(
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Min(5),     // top spacer
-                    Constraint::Length(3),   // title
-                    Constraint::Length(11),  // VS animation
-                    Constraint::Length(5),   // spinner + status
+                    Constraint::Length(3),  // title
+                    Constraint::Length(11), // VS animation
+                    Constraint::Length(5),  // spinner + status
                     Constraint::Min(3),     // bottom spacer
                 ])
                 .split(area);
@@ -1463,7 +1931,9 @@ pub fn battle_loading_screen(
             };
             let title = Paragraph::new(Line::from(Span::styled(
                 "\u{2694}  BATTLE IN PROGRESS  \u{2694}",
-                Style::default().fg(title_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(title_color)
+                    .add_modifier(Modifier::BOLD),
             )))
             .alignment(Alignment::Center)
             .block(game_block("ANALYZING", title_color));
@@ -1472,53 +1942,96 @@ pub fn battle_loading_screen(
             // VS animation with faces
             let cols = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(35), Constraint::Percentage(30), Constraint::Percentage(35)])
+                .constraints([
+                    Constraint::Percentage(35),
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(35),
+                ])
                 .split(layout[2]);
 
             // Left face
-            let left_lines: Vec<Line> = FACE_LEFT.iter().enumerate().map(|(i, line)| {
-                let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
-                let color = Color::Rgb(255, 190 + pulse.min(15), 130 + pulse.min(10));
-                Line::from(Span::styled(*line, Style::default().fg(color)))
-            }).collect();
+            let left_lines: Vec<Line> = FACE_LEFT
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
+                    let color = Color::Rgb(255, 190 + pulse.min(15), 130 + pulse.min(10));
+                    Line::from(Span::styled(*line, Style::default().fg(color)))
+                })
+                .collect();
             let left_bounce = face_bounce(f, false);
             let mut left_padded = Vec::new();
-            for _ in 0..(1 + left_bounce).max(0) as usize { left_padded.push(Line::from("")); }
+            for _ in 0..(1 + left_bounce).max(0) as usize {
+                left_padded.push(Line::from(""));
+            }
             left_padded.extend(left_lines);
-            frame_ref.render_widget(Paragraph::new(left_padded).alignment(Alignment::Center), cols[0]);
+            frame_ref.render_widget(
+                Paragraph::new(left_padded).alignment(Alignment::Center),
+                cols[0],
+            );
 
             // VS sparks
             let vs_idx = (f as usize / 2) % VS_FRAMES.len();
-            let vs_lines: Vec<Line> = VS_FRAMES[vs_idx].iter().enumerate().map(|(i, line)| {
-                if i == 1 {
-                    Line::from(Span::styled(*line, Style::default().fg(vs_color(f)).add_modifier(Modifier::BOLD)))
-                } else {
-                    Line::from(Span::styled(*line, Style::default().fg(spark_color(f + i as u64))))
-                }
-            }).collect();
+            let vs_lines: Vec<Line> = VS_FRAMES[vs_idx]
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    if i == 1 {
+                        Line::from(Span::styled(
+                            *line,
+                            Style::default()
+                                .fg(vs_color(f))
+                                .add_modifier(Modifier::BOLD),
+                        ))
+                    } else {
+                        Line::from(Span::styled(
+                            *line,
+                            Style::default().fg(spark_color(f + i as u64)),
+                        ))
+                    }
+                })
+                .collect();
             let mut vs_padded = Vec::new();
-            for _ in 0..3 { vs_padded.push(Line::from("")); }
+            for _ in 0..3 {
+                vs_padded.push(Line::from(""));
+            }
             vs_padded.extend(vs_lines);
-            frame_ref.render_widget(Paragraph::new(vs_padded).alignment(Alignment::Center), cols[1]);
+            frame_ref.render_widget(
+                Paragraph::new(vs_padded).alignment(Alignment::Center),
+                cols[1],
+            );
 
             // Right face
-            let right_lines: Vec<Line> = FACE_RIGHT.iter().enumerate().map(|(i, line)| {
-                let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
-                let color = Color::Rgb(160 + pulse.min(15), 190 + pulse.min(15), 255);
-                Line::from(Span::styled(*line, Style::default().fg(color)))
-            }).collect();
+            let right_lines: Vec<Line> = FACE_RIGHT
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
+                    let color = Color::Rgb(160 + pulse.min(15), 190 + pulse.min(15), 255);
+                    Line::from(Span::styled(*line, Style::default().fg(color)))
+                })
+                .collect();
             let right_bounce = face_bounce(f, true);
             let mut right_padded = Vec::new();
-            for _ in 0..(1 + right_bounce).max(0) as usize { right_padded.push(Line::from("")); }
+            for _ in 0..(1 + right_bounce).max(0) as usize {
+                right_padded.push(Line::from(""));
+            }
             right_padded.extend(right_lines);
-            frame_ref.render_widget(Paragraph::new(right_padded).alignment(Alignment::Center), cols[2]);
+            frame_ref.render_widget(
+                Paragraph::new(right_padded).alignment(Alignment::Center),
+                cols[2],
+            );
 
             // Spinner + status
             let spinner = SPINNER_FRAMES[(f as usize) % SPINNER_FRAMES.len()];
             let phrase = BATTLE_PHRASES[((f / 8) as usize) % BATTLE_PHRASES.len()];
             let bar_w = 30usize;
             let progress = ((f % (bar_w as u64 * 2)) as usize).min(bar_w);
-            let bar = format!("{}{}", "\u{2588}".repeat(progress), "\u{2591}".repeat(bar_w - progress));
+            let bar = format!(
+                "{}{}",
+                "\u{2588}".repeat(progress),
+                "\u{2591}".repeat(bar_w - progress)
+            );
 
             let status = Paragraph::new(vec![
                 Line::from(""),
@@ -1532,7 +2045,11 @@ pub fn battle_loading_screen(
                 ]),
             ])
             .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+            );
             frame_ref.render_widget(status, layout[3]);
         })?;
 
@@ -1580,10 +2097,34 @@ const FACE_RIGHT: [&str; 9] = [
 ];
 
 const VS_FRAMES: [[&str; 5]; 4] = [
-    [" \u{2728}        ", "   \u{2694} VS \u{2694}  ", "        \u{2728} ", "  \u{2606}      ", "      \u{2606}  "],
-    ["        \u{2605} ", "   \u{2694} VS \u{2694}  ", " \u{2605}        ", "      \u{2734}  ", "  \u{2734}      "],
-    ["  \u{2734}      ", "   \u{2694} VS \u{2694}  ", "      \u{2734}  ", "        \u{2728} ", " \u{2728}        "],
-    ["      \u{2606}  ", "   \u{2694} VS \u{2694}  ", "  \u{2606}      ", " \u{2605}        ", "        \u{2605} "],
+    [
+        " \u{2728}        ",
+        "   \u{2694} VS \u{2694}  ",
+        "        \u{2728} ",
+        "  \u{2606}      ",
+        "      \u{2606}  ",
+    ],
+    [
+        "        \u{2605} ",
+        "   \u{2694} VS \u{2694}  ",
+        " \u{2605}        ",
+        "      \u{2734}  ",
+        "  \u{2734}      ",
+    ],
+    [
+        "  \u{2734}      ",
+        "   \u{2694} VS \u{2694}  ",
+        "      \u{2734}  ",
+        "        \u{2728} ",
+        " \u{2728}        ",
+    ],
+    [
+        "      \u{2606}  ",
+        "   \u{2694} VS \u{2694}  ",
+        "  \u{2606}      ",
+        " \u{2605}        ",
+        "        \u{2605} ",
+    ],
 ];
 
 fn spark_color(frame: u64) -> Color {
@@ -1633,31 +2174,35 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
 
             // Dark background
             frame_ref.render_widget(Clear, area);
-            frame_ref.render_widget(
-                Block::default().style(Style::default().bg(DARK_BG)),
-                area,
-            );
+            frame_ref.render_widget(Block::default().style(Style::default().bg(DARK_BG)), area);
 
             let star_height = if star_acknowledged { 0u16 } else { 5 };
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(8),       // logo
-                    Constraint::Length(1),       // spacer
-                    Constraint::Length(11),      // faces + VS
-                    Constraint::Length(1),       // spacer
-                    Constraint::Length(3),       // labels
+                    Constraint::Length(8),           // logo
+                    Constraint::Length(1),           // spacer
+                    Constraint::Length(11),          // faces + VS
+                    Constraint::Length(1),           // spacer
+                    Constraint::Length(3),           // labels
                     Constraint::Length(star_height), // star Y/N modal
-                    Constraint::Min(1),         // spacer
-                    Constraint::Length(3),       // press any key
+                    Constraint::Min(1),              // spacer
+                    Constraint::Length(3),           // press any key
                 ])
                 .split(area);
 
             // ── Animated gradient logo ────────────────────────────────
-            let logo_lines: Vec<Line> = LOGO.iter().enumerate().map(|(i, line)| {
-                let color_shift = ((f / 3) as usize + i) % 6;
-                Line::from(Span::styled(*line, Style::default().fg(logo_gradient_color(color_shift))))
-            }).collect();
+            let logo_lines: Vec<Line> = LOGO
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    let color_shift = ((f / 3) as usize + i) % 6;
+                    Line::from(Span::styled(
+                        *line,
+                        Style::default().fg(logo_gradient_color(color_shift)),
+                    ))
+                })
+                .collect();
             let logo = Paragraph::new(logo_lines)
                 .alignment(Alignment::Center)
                 .block(Block::default().style(Style::default().bg(DARK_BG)));
@@ -1676,54 +2221,79 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
 
             // Left face with bounce + warm amber skin tone
             let left_bounce = face_bounce(f, false);
-            let left_lines: Vec<Line> = FACE_LEFT.iter().enumerate().map(|(i, line)| {
-                let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
-                let color = Color::Rgb(255, 190 + (pulse.min(15)) as u8, 130 + (pulse.min(10)) as u8);
-                Line::from(Span::styled(*line, Style::default().fg(color)))
-            }).collect();
+            let left_lines: Vec<Line> = FACE_LEFT
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
+                    let color = Color::Rgb(
+                        255,
+                        190 + (pulse.min(15)) as u8,
+                        130 + (pulse.min(10)) as u8,
+                    );
+                    Line::from(Span::styled(*line, Style::default().fg(color)))
+                })
+                .collect();
             let mut left_face_lines = Vec::new();
             let pad = (1 + left_bounce).max(0) as usize;
-            for _ in 0..pad { left_face_lines.push(Line::from("")); }
+            for _ in 0..pad {
+                left_face_lines.push(Line::from(""));
+            }
             left_face_lines.extend(left_lines);
-            let left_face = Paragraph::new(left_face_lines)
-                .alignment(Alignment::Center);
+            let left_face = Paragraph::new(left_face_lines).alignment(Alignment::Center);
             frame_ref.render_widget(left_face, cols[0]);
 
             // VS animation in center - taller to match face height
             let vs_frame_idx = (f as usize / 2) % VS_FRAMES.len();
-            let vs_lines: Vec<Line> = VS_FRAMES[vs_frame_idx].iter().enumerate().map(|(i, line)| {
-                if i == 1 {
-                    Line::from(Span::styled(
-                        *line,
-                        Style::default().fg(vs_color(f)).add_modifier(Modifier::BOLD),
-                    ))
-                } else {
-                    Line::from(Span::styled(
-                        *line,
-                        Style::default().fg(spark_color(f + i as u64)),
-                    ))
-                }
-            }).collect();
+            let vs_lines: Vec<Line> = VS_FRAMES[vs_frame_idx]
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    if i == 1 {
+                        Line::from(Span::styled(
+                            *line,
+                            Style::default()
+                                .fg(vs_color(f))
+                                .add_modifier(Modifier::BOLD),
+                        ))
+                    } else {
+                        Line::from(Span::styled(
+                            *line,
+                            Style::default().fg(spark_color(f + i as u64)),
+                        ))
+                    }
+                })
+                .collect();
             let mut vs_padded = Vec::new();
-            for _ in 0..3 { vs_padded.push(Line::from("")); }
+            for _ in 0..3 {
+                vs_padded.push(Line::from(""));
+            }
             vs_padded.extend(vs_lines);
-            let vs_widget = Paragraph::new(vs_padded)
-                .alignment(Alignment::Center);
+            let vs_widget = Paragraph::new(vs_padded).alignment(Alignment::Center);
             frame_ref.render_widget(vs_widget, cols[1]);
 
             // Right face with bounce + cool blue-silver tone
             let right_bounce = face_bounce(f, true);
-            let right_lines: Vec<Line> = FACE_RIGHT.iter().enumerate().map(|(i, line)| {
-                let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
-                let color = Color::Rgb(160 + (pulse.min(15)) as u8, 190 + (pulse.min(15)) as u8, 255);
-                Line::from(Span::styled(*line, Style::default().fg(color)))
-            }).collect();
+            let right_lines: Vec<Line> = FACE_RIGHT
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    let pulse = ((f as u8).wrapping_mul(2).wrapping_add(i as u8 * 3)) % 20;
+                    let color = Color::Rgb(
+                        160 + (pulse.min(15)) as u8,
+                        190 + (pulse.min(15)) as u8,
+                        255,
+                    );
+                    Line::from(Span::styled(*line, Style::default().fg(color)))
+                })
+                .collect();
             let mut right_face_lines = Vec::new();
             let pad = (1 + right_bounce).max(0) as usize;
-            for _ in 0..pad { right_face_lines.push(Line::from("")); }
+            for _ in 0..pad {
+                right_face_lines.push(Line::from(""));
+            }
             right_face_lines.extend(right_lines);
-            let right_face = Paragraph::new(right_face_lines)
-                .alignment(Alignment::Center);
+            let right_face = Paragraph::new(right_face_lines).alignment(Alignment::Center);
             frame_ref.render_widget(right_face, cols[2]);
 
             // ── Labels ──────────────────────────────────────────────
@@ -1738,20 +2308,27 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
 
             let left_label = Paragraph::new(Line::from(Span::styled(
                 "CHALLENGER",
-                Style::default().fg(NEON_ORANGE).add_modifier(Modifier::BOLD),
-            ))).alignment(Alignment::Center);
+                Style::default()
+                    .fg(NEON_ORANGE)
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .alignment(Alignment::Center);
             frame_ref.render_widget(left_label, label_cols[0]);
 
             let vs_label = Paragraph::new(Line::from(Span::styled(
                 "\u{26A1} FACE OFF \u{26A1}",
-                Style::default().fg(vs_color(f)).add_modifier(Modifier::BOLD),
-            ))).alignment(Alignment::Center);
+                Style::default()
+                    .fg(vs_color(f))
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .alignment(Alignment::Center);
             frame_ref.render_widget(vs_label, label_cols[1]);
 
             let right_label = Paragraph::new(Line::from(Span::styled(
                 "DEFENDER",
                 Style::default().fg(NEON_BLUE).add_modifier(Modifier::BOLD),
-            ))).alignment(Alignment::Center);
+            )))
+            .alignment(Alignment::Center);
             frame_ref.render_widget(right_label, label_cols[2]);
 
             // ── Star Y/N modal (until acknowledged) ───────────────
@@ -1777,28 +2354,20 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                             " [Y / YES / Enter] ",
                             Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
                         ),
-                        Span::styled(
-                            "Open GitHub and remember",
-                            Style::default().fg(DIM_TEXT),
-                        ),
+                        Span::styled("Open GitHub and remember", Style::default().fg(DIM_TEXT)),
                         Span::styled("    ", Style::default()),
                         Span::styled(
                             " [N] ",
                             Style::default().fg(NEON_RED).add_modifier(Modifier::BOLD),
                         ),
-                        Span::styled(
-                            "No — ask again next launch",
-                            Style::default().fg(DIM_TEXT),
-                        ),
+                        Span::styled("No — ask again next launch", Style::default().fg(DIM_TEXT)),
                     ]),
                 ];
-                let star_msg = Paragraph::new(lines)
-                    .alignment(Alignment::Center)
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .border_style(Style::default().fg(star_pulse)),
-                    );
+                let star_msg = Paragraph::new(lines).alignment(Alignment::Center).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(star_pulse)),
+                );
                 frame_ref.render_widget(star_msg, layout[5]);
             }
 
@@ -1808,13 +2377,25 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
             if star_acknowledged {
                 footer_spans.push(Span::styled(
                     " \u{23CE} ENTER",
-                    Style::default().fg(if blink { NEON_GREEN } else { Color::Rgb(40, 80, 40) }).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(if blink {
+                            NEON_GREEN
+                        } else {
+                            Color::Rgb(40, 80, 40)
+                        })
+                        .add_modifier(Modifier::BOLD),
                 ));
                 footer_spans.push(Span::styled(" Start  ", Style::default().fg(DIM_TEXT)));
             } else {
                 footer_spans.push(Span::styled(
                     " Y",
-                    Style::default().fg(if blink { NEON_GREEN } else { Color::Rgb(40, 80, 40) }).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(if blink {
+                            NEON_GREEN
+                        } else {
+                            Color::Rgb(40, 80, 40)
+                        })
+                        .add_modifier(Modifier::BOLD),
                 ));
                 footer_spans.push(Span::styled(" Yes (star)  ", Style::default().fg(DIM_TEXT)));
                 footer_spans.push(Span::styled(
@@ -1835,9 +2416,11 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
 
             let prompt = Paragraph::new(Line::from(footer_spans))
                 .alignment(Alignment::Center)
-                .block(Block::default()
-                    .borders(Borders::TOP)
-                    .border_style(Style::default().fg(Color::Rgb(50, 50, 70))));
+                .block(
+                    Block::default()
+                        .borders(Borders::TOP)
+                        .border_style(Style::default().fg(Color::Rgb(50, 50, 70))),
+                );
             frame_ref.render_widget(prompt, layout[7]);
         })?;
 
@@ -1855,8 +2438,10 @@ pub fn splash_screen(star_acknowledged: bool) -> Result<bool> {
                     // first key is enough. N intentionally does not persist,
                     // causing this pre-start page to return next launch.
                     match key.code {
-                        KeyCode::Char('y') | KeyCode::Char('Y')
-                        | KeyCode::Char('s') | KeyCode::Char('S')
+                        KeyCode::Char('y')
+                        | KeyCode::Char('Y')
+                        | KeyCode::Char('s')
+                        | KeyCode::Char('S')
                         | KeyCode::Enter
                         | KeyCode::Char(' ') => return Ok(true),
                         KeyCode::Char('n') | KeyCode::Char('N') => return Ok(false),

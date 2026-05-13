@@ -4,17 +4,18 @@ use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use better_than_you::{
     analyze_portrait_battle, check_latest_release_version, clear_all_reports, default_reports_dir,
-    generate_share_bundle, is_newer_version, open_path, prune_old_reports, read_clipboard_text,
-    regenerate_battle_report, render_open_summary, render_report_summary, render_terminal_battle,
-    save_battle_artifacts, serve_reports_blocking, write_clipboard_text,
-    AnalyzeOptions, AXIS_DEFINITIONS, BattleResult, JudgeMode, Language, t,
-    OPENAI_VLM_MODELS, ANTHROPIC_VLM_MODELS, GEMINI_VLM_MODELS, GROK_VLM_MODELS, REPORTS_KEEP_RECENT,
+    generate_share_bundle, is_newer_version, open_path, prune_old_reports,
+    publish_share_bundle_to_web, read_clipboard_text, regenerate_battle_report,
+    render_open_summary, render_report_summary, render_terminal_battle, save_battle_artifacts,
+    serve_reports_blocking, share_clipboard_text, t, write_clipboard_text, AnalyzeOptions,
+    BattleResult, JudgeMode, Language, PublishedShareBundle, ANTHROPIC_VLM_MODELS,
+    AXIS_DEFINITIONS, GEMINI_VLM_MODELS, GROK_VLM_MODELS, OPENAI_VLM_MODELS, REPORTS_KEEP_RECENT,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -56,7 +57,11 @@ impl JudgeCli {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "better-than-you", version, about = "CLI-first portrait battle tool")]
+#[command(
+    name = "better-than-you",
+    version,
+    about = "CLI-first portrait battle tool"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -98,6 +103,8 @@ enum Commands {
     Open(OpenArgs),
     /// Serve the reports directory over HTTP on your LAN for phone viewing.
     Serve(ServeArgs),
+    /// Publish the latest or specified battle report to a public web URL.
+    Publish(PublishArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -156,6 +163,23 @@ struct OpenArgs {
     out_dir: Option<PathBuf>,
 }
 
+#[derive(Parser, Debug)]
+struct PublishArgs {
+    /// Battle JSON path. Defaults to latest-battle.json in the reports directory.
+    battle_json_path: Option<PathBuf>,
+    #[arg(long)]
+    out_dir: Option<PathBuf>,
+    /// Copy the public share URL to the clipboard.
+    #[arg(long)]
+    copy: bool,
+    /// Open the public share page after publishing.
+    #[arg(long)]
+    open: bool,
+    /// Print structured JSON instead of the terminal summary.
+    #[arg(long)]
+    json: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct AppState {
     star_acknowledged: bool,
@@ -200,8 +224,14 @@ impl SessionState {
         let app_state = load_app_state();
         Self {
             judge: app_state.judge.clone().unwrap_or(JudgeCli::Auto),
-            model: app_state.model.clone().unwrap_or_else(|| "gpt-5.4-mini".to_string()),
-            out_dir: app_state.out_dir.clone().unwrap_or_else(default_reports_dir),
+            model: app_state
+                .model
+                .clone()
+                .unwrap_or_else(|| "gpt-5.4-mini".to_string()),
+            out_dir: app_state
+                .out_dir
+                .clone()
+                .unwrap_or_else(default_reports_dir),
             axis_weights: app_state.axis_weights.clone(),
             language: app_state.language.unwrap_or(Language::English),
             app_state,
@@ -223,13 +253,19 @@ fn app_state_path() -> Option<PathBuf> {
 }
 
 fn load_app_state() -> AppState {
-    let Some(path) = app_state_path() else { return AppState::default(); };
-    let Ok(bytes) = fs::read(path) else { return AppState::default(); };
+    let Some(path) = app_state_path() else {
+        return AppState::default();
+    };
+    let Ok(bytes) = fs::read(path) else {
+        return AppState::default();
+    };
     serde_json::from_slice(&bytes).unwrap_or_default()
 }
 
 fn save_app_state(state: &AppState) -> Result<()> {
-    let Some(path) = app_state_path() else { return Ok(()); };
+    let Some(path) = app_state_path() else {
+        return Ok(());
+    };
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -238,7 +274,7 @@ fn save_app_state(state: &AppState) -> Result<()> {
 }
 
 fn star_acknowledged(state: &AppState) -> bool {
-    state.star_acknowledged && matches!(state.star_ack_source.as_deref(), Some("gh"))
+    state.star_acknowledged && matches!(state.star_ack_source.as_deref(), Some("gh" | "web"))
 }
 
 fn star_repo_via_gh() -> bool {
@@ -252,7 +288,11 @@ fn star_repo_via_gh() -> bool {
 
 fn open_star_repo_page() {
     let star_url = "https://github.com/NomaDamas/BetterThanYou";
-    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     let _ = Command::new(opener).arg(star_url).status();
 }
 
@@ -264,8 +304,8 @@ fn handle_star_request(state: &mut AppState) -> Result<bool> {
         return Ok(true);
     }
 
-    state.star_acknowledged = false;
-    state.star_ack_source = None;
+    state.star_acknowledged = true;
+    state.star_ack_source = Some("web".to_string());
     save_app_state(state)?;
     open_star_repo_page();
     Ok(false)
@@ -353,12 +393,8 @@ async fn auto_update_check(skip: bool) {
     );
 
     if !cargo_available() {
-        eprintln!(
-            "   Auto-install needs the Rust toolchain (https://rustup.rs)."
-        );
-        eprintln!(
-            "   Or run: brew upgrade NomaDamas/better-than-you/better-than-you"
-        );
+        eprintln!("   Auto-install needs the Rust toolchain (https://rustup.rs).");
+        eprintln!("   Or run: brew upgrade NomaDamas/better-than-you/better-than-you");
         return;
     }
 
@@ -408,7 +444,10 @@ async fn auto_update_check(skip: bool) {
             return;
         }
     };
-    let frames = ['\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}', '\u{2834}', '\u{2826}', '\u{2827}', '\u{2807}', '\u{280F}'];
+    let frames = [
+        '\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}', '\u{2834}', '\u{2826}',
+        '\u{2827}', '\u{2807}', '\u{280F}',
+    ];
     let start = std::time::Instant::now();
     let mut i = 0usize;
     let status = loop {
@@ -517,7 +556,10 @@ async fn auto_update_check(skip: bool) {
     }
     #[cfg(not(unix))]
     {
-        eprintln!("Update installed at {}. Re-run `better-than-you`.", current_exe.display());
+        eprintln!(
+            "Update installed at {}. Re-run `better-than-you`.",
+            current_exe.display()
+        );
         std::process::exit(0);
     }
 }
@@ -550,9 +592,13 @@ fn resolve_axis_weight(entry: &str) -> Result<(String, f32), String> {
     let (key, value) = entry
         .split_once('=')
         .ok_or_else(|| format!("axis-weight must be KEY=WEIGHT: {entry}"))?;
-    let weight = value.parse::<f32>().map_err(|_| format!("invalid axis weight value for {}: {value}", key))?;
+    let weight = value
+        .parse::<f32>()
+        .map_err(|_| format!("invalid axis weight value for {}: {value}", key))?;
     if !weight.is_finite() || weight < 0.0 {
-        return Err(format!("axis-weight must be finite and non-negative for {key}"));
+        return Err(format!(
+            "axis-weight must be finite and non-negative for {key}"
+        ));
     }
     if !AXIS_DEFINITIONS.iter().any(|axis| axis.key == key) {
         return Err(format!("unknown axis key: {key}"));
@@ -590,7 +636,12 @@ fn set_axis_weight(overrides: &mut Vec<(String, f32)>, key: &str, weight: f32) {
     overrides.push((key.to_string(), weight));
 }
 
-fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: bool, right_clipboard: bool) -> Result<(String, String)> {
+fn resolve_sources(
+    left: Option<String>,
+    right: Option<String>,
+    left_clipboard: bool,
+    right_clipboard: bool,
+) -> Result<(String, String)> {
     let mut left_value = left.map(normalize_input);
     let mut right_value = right.map(normalize_input);
 
@@ -615,10 +666,14 @@ fn resolve_sources(left: Option<String>, right: Option<String>, left_clipboard: 
         }
     } else {
         if left_value.is_none() {
-            left_value = Some(prompt_line("Drag or paste LEFT portrait path/URL/data URL: ")?);
+            left_value = Some(prompt_line(
+                "Drag or paste LEFT portrait path/URL/data URL: ",
+            )?);
         }
         if right_value.is_none() {
-            right_value = Some(prompt_line("Drag or paste RIGHT portrait path/URL/data URL: ")?);
+            right_value = Some(prompt_line(
+                "Drag or paste RIGHT portrait path/URL/data URL: ",
+            )?);
         }
     }
 
@@ -634,14 +689,17 @@ fn maybe_print_star_reminder(state: &AppState) {
     }
 }
 
-fn select_menu(title: &str, subtitle: &[String], items: &[String], initial_index: usize) -> Result<Option<usize>> {
+fn select_menu(
+    title: &str,
+    subtitle: &[String],
+    items: &[String],
+    initial_index: usize,
+) -> Result<Option<usize>> {
     match ui::select_menu(title, subtitle, items, initial_index) {
         Ok(result) => Ok(result),
-        Err(_) => Ok(Some(initial_index.min(items.len().saturating_sub(1))))
+        Err(_) => Ok(Some(initial_index.min(items.len().saturating_sub(1)))),
     }
 }
-
-
 
 fn judge_index(judge: &JudgeCli) -> usize {
     match judge {
@@ -672,7 +730,9 @@ fn ensure_openai_ready(state: &mut SessionState) -> Result<()> {
 
     match select_menu("OpenAI Key Required", &subtitle, &items, 0)? {
         Some(0) => {
-            if let Some(key) = ui::text_input("OpenAI API Key", "Paste your API key (sk-...)", "", true)? {
+            if let Some(key) =
+                ui::text_input("OpenAI API Key", "Paste your API key (sk-...)", "", true)?
+            {
                 if !key.is_empty() {
                     state.app_state.openai_api_key = Some(key);
                     save_app_state(&state.app_state)?;
@@ -687,8 +747,16 @@ fn ensure_openai_ready(state: &mut SessionState) -> Result<()> {
     Ok(())
 }
 
-async fn battle_from_args(args: &BattleArgs, state: Option<&SessionState>) -> Result<(BattleResult, better_than_you::SavedArtifacts)> {
-    let (left_source, right_source) = resolve_sources(args.left.clone(), args.right.clone(), args.left_clipboard, args.right_clipboard)?;
+async fn battle_from_args(
+    args: &BattleArgs,
+    state: Option<&SessionState>,
+) -> Result<(BattleResult, better_than_you::SavedArtifacts)> {
+    let (left_source, right_source) = resolve_sources(
+        args.left.clone(),
+        args.right.clone(),
+        args.left_clipboard,
+        args.right_clipboard,
+    )?;
     let output_dir = args.out_dir.clone().unwrap_or_else(default_reports_dir);
 
     let mut options = AnalyzeOptions::new(left_source, right_source);
@@ -741,17 +809,55 @@ async fn run_battle(args: BattleArgs) -> Result<()> {
             &["Enter/q return".to_string(), "o open report".to_string()],
         )?;
         if matches!(exit, ui::BattleViewExit::OpenRequest) {
-            handle_open_request(&html_path)?;
+            handle_open_request(
+                &result,
+                &html_path,
+                &args.out_dir.clone().unwrap_or_else(default_reports_dir),
+            )
+            .await?;
         }
     } else {
-        println!("{}", render_terminal_battle(&result, &artifacts, io::stdout().is_terminal()));
+        println!(
+            "{}",
+            render_terminal_battle(&result, &artifacts, io::stdout().is_terminal())
+        );
     }
 
     Ok(())
 }
 
-fn handle_open_request(html_path: &std::path::Path) -> Result<()> {
-    open_path(html_path)?;
+fn persist_published_share(output_dir: &Path, published: &PublishedShareBundle) -> Result<()> {
+    fs::write(
+        output_dir.join("latest-published.json"),
+        serde_json::to_vec_pretty(published)?,
+    )?;
+    Ok(())
+}
+
+async fn publish_current_share(
+    result: &BattleResult,
+    html_path: &Path,
+    output_dir: &Path,
+) -> Result<PublishedShareBundle> {
+    let published = publish_share_bundle_to_web(result, html_path, output_dir).await?;
+    persist_published_share(output_dir, &published)?;
+    Ok(published)
+}
+
+async fn handle_open_request(
+    result: &BattleResult,
+    html_path: &Path,
+    output_dir: &Path,
+) -> Result<()> {
+    match publish_current_share(result, html_path, output_dir).await {
+        Ok(published) => {
+            let _ = write_clipboard_text(&published.share_page_url);
+            open_path(PathBuf::from(&published.share_page_url).as_path())?;
+        }
+        Err(_) => {
+            open_path(html_path)?;
+        }
+    }
     Ok(())
 }
 
@@ -774,7 +880,10 @@ async fn run_report(args: ReportArgs) -> Result<()> {
     if args.json {
         println!("{}", serde_json::to_string_pretty(&artifacts)?);
     } else {
-        println!("{}", render_report_summary(&artifacts, io::stdout().is_terminal()));
+        println!(
+            "{}",
+            render_report_summary(&artifacts, io::stdout().is_terminal())
+        );
     }
     Ok(())
 }
@@ -785,18 +894,22 @@ async fn run_open(args: OpenArgs) -> Result<()> {
     // Explicit target — always honor, even if local. Caller asked for that file.
     if let Some(target) = args.target {
         open_path(&target)?;
-        println!("{}", render_open_summary(&target, io::stdout().is_terminal()));
+        println!(
+            "{}",
+            render_open_summary(&target, io::stdout().is_terminal())
+        );
         return Ok(());
     }
 
     let html_path = output_dir.join("latest-battle.html");
     if !html_path.exists() {
-        bail!(
-            "No report to open. Run a battle first: better-than-you battle <left> <right>"
-        );
+        bail!("No report to open. Run a battle first: better-than-you battle <left> <right>");
     }
     open_path(&html_path)?;
-    println!("{}", render_open_summary(&html_path, io::stdout().is_terminal()));
+    println!(
+        "{}",
+        render_open_summary(&html_path, io::stdout().is_terminal())
+    );
     Ok(())
 }
 
@@ -807,6 +920,48 @@ fn run_serve(args: ServeArgs) -> Result<()> {
     }
     // This blocks until Ctrl-C.
     let _ = serve_reports_blocking(&output_dir, args.port)?;
+    Ok(())
+}
+
+async fn run_publish(args: PublishArgs) -> Result<()> {
+    let output_dir = args.out_dir.unwrap_or_else(default_reports_dir);
+    let battle_json = args
+        .battle_json_path
+        .unwrap_or_else(|| output_dir.join("latest-battle.json"));
+    if !battle_json.exists() {
+        bail!(
+            "No battle JSON to publish. Run a battle first: better-than-you battle <left> <right>"
+        );
+    }
+
+    let artifacts = regenerate_battle_report(&battle_json, &output_dir)?;
+    let bytes = fs::read(&battle_json)?;
+    let result: BattleResult = serde_json::from_slice(&bytes)?;
+    let published =
+        publish_current_share(&result, &PathBuf::from(&artifacts.html_path), &output_dir).await?;
+
+    if args.copy {
+        let _ = write_clipboard_text(&published.share_page_url);
+    }
+    if args.open {
+        open_path(PathBuf::from(&published.share_page_url).as_path())?;
+    }
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&published)?);
+    } else {
+        println!("\u{1F310} BetterThanYou public web report");
+        println!("  \u{2022} Share page: {}", published.share_page_url);
+        println!("  \u{2022} Report    : {}", published.report_url);
+        println!("  \u{2022} Preview   : {}", published.preview_image_url);
+        println!("  \u{2022} Provider  : {}", published.provider);
+        if args.copy {
+            println!("  \u{2022} Copied share URL to clipboard");
+        }
+        println!();
+        println!("{}", published.qr_ascii);
+    }
+
     Ok(())
 }
 
@@ -838,7 +993,9 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                     "Grok judge".to_string(),
                     "Heuristic judge".to_string(),
                 ];
-                if let Some(choice) = select_menu("Judge Mode", &[], &judge_items, judge_index(&state.judge))? {
+                if let Some(choice) =
+                    select_menu("Judge Mode", &[], &judge_items, judge_index(&state.judge))?
+                {
                     state.judge = match choice {
                         0 => JudgeCli::Auto,
                         1 => JudgeCli::Openai,
@@ -853,42 +1010,74 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
             }
             Some(1) => {
                 let model_list: Vec<String> = match state.judge {
-                    JudgeCli::Anthropic => ANTHROPIC_VLM_MODELS.iter().map(|s| s.to_string()).collect(),
+                    JudgeCli::Anthropic => {
+                        ANTHROPIC_VLM_MODELS.iter().map(|s| s.to_string()).collect()
+                    }
                     JudgeCli::Gemini => GEMINI_VLM_MODELS.iter().map(|s| s.to_string()).collect(),
                     JudgeCli::Grok => GROK_VLM_MODELS.iter().map(|s| s.to_string()).collect(),
                     _ => OPENAI_VLM_MODELS.iter().map(|s| s.to_string()).collect(),
                 };
                 let mut items_with_custom = model_list.clone();
                 items_with_custom.push("Custom (type model name)".to_string());
-                let current_index = model_list.iter().position(|m| m == &state.model).unwrap_or(0);
-                if let Some(choice) = select_menu("Select Model", &[], &items_with_custom, current_index)? {
+                let current_index = model_list
+                    .iter()
+                    .position(|m| m == &state.model)
+                    .unwrap_or(0);
+                if let Some(choice) =
+                    select_menu("Select Model", &[], &items_with_custom, current_index)?
+                {
                     if choice < model_list.len() {
                         state.model = model_list[choice].clone();
-                    } else if let Some(model) = ui::text_input("Custom Model", "Enter model name", "", false)? {
-                        if !model.is_empty() { state.model = model; }
+                    } else if let Some(model) =
+                        ui::text_input("Custom Model", "Enter model name", "", false)?
+                    {
+                        if !model.is_empty() {
+                            state.model = model;
+                        }
                     }
                     state.app_state.model = Some(state.model.clone());
                     save_app_state(&state.app_state)?;
                 }
             }
             Some(2) => {
-                if let Some(label) = ui::text_input("Left Label", "Optional name for the left portrait", state.left_label.as_deref().unwrap_or(""), false)? {
+                if let Some(label) = ui::text_input(
+                    "Left Label",
+                    "Optional name for the left portrait",
+                    state.left_label.as_deref().unwrap_or(""),
+                    false,
+                )? {
                     state.left_label = if label.is_empty() { None } else { Some(label) };
                 }
-                if let Some(label) = ui::text_input("Right Label", "Optional name for the right portrait", state.right_label.as_deref().unwrap_or(""), false)? {
+                if let Some(label) = ui::text_input(
+                    "Right Label",
+                    "Optional name for the right portrait",
+                    state.right_label.as_deref().unwrap_or(""),
+                    false,
+                )? {
                     state.right_label = if label.is_empty() { None } else { Some(label) };
                 }
             }
             Some(3) => {
                 let clip = read_clipboard_text()?;
-                let parts: Vec<String> = clip.replace('\r', "").split('\n').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect();
+                let parts: Vec<String> = clip
+                    .replace('\r', "")
+                    .split('\n')
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_string)
+                    .collect();
                 if parts.len() >= 2 {
                     state.left = Some(parts[0].clone());
                     state.right = Some(parts[1].clone());
                 }
             }
             Some(4) => {
-                if let Some(out) = ui::text_input("Output Directory", "Path where reports are saved", &state.out_dir.display().to_string(), false)? {
+                if let Some(out) = ui::text_input(
+                    "Output Directory",
+                    "Path where reports are saved",
+                    &state.out_dir.display().to_string(),
+                    false,
+                )? {
                     if !out.is_empty() {
                         state.out_dir = PathBuf::from(out);
                         state.app_state.out_dir = Some(state.out_dir.clone());
@@ -897,10 +1086,26 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 }
             }
             Some(5) => {
-                let openai_status = if state.app_state.openai_api_key.is_some() { " \u{2714}" } else { "" };
-                let anthropic_status = if state.app_state.anthropic_api_key.is_some() { " \u{2714}" } else { "" };
-                let gemini_status = if state.app_state.gemini_api_key.is_some() { " \u{2714}" } else { "" };
-                let grok_status = if state.app_state.grok_api_key.is_some() { " \u{2714}" } else { "" };
+                let openai_status = if state.app_state.openai_api_key.is_some() {
+                    " \u{2714}"
+                } else {
+                    ""
+                };
+                let anthropic_status = if state.app_state.anthropic_api_key.is_some() {
+                    " \u{2714}"
+                } else {
+                    ""
+                };
+                let gemini_status = if state.app_state.gemini_api_key.is_some() {
+                    " \u{2714}"
+                } else {
+                    ""
+                };
+                let grok_status = if state.app_state.grok_api_key.is_some() {
+                    " \u{2714}"
+                } else {
+                    ""
+                };
                 let items = vec![
                     format!("Set OpenAI API key{}", openai_status),
                     format!("Set Anthropic API key{}", anthropic_status),
@@ -911,7 +1116,12 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 ];
                 match select_menu("API Keys", &[], &items, 0)? {
                     Some(0) => {
-                        if let Some(key) = ui::text_input("OpenAI API Key", "Paste your OpenAI API key (sk-...)", "", true)? {
+                        if let Some(key) = ui::text_input(
+                            "OpenAI API Key",
+                            "Paste your OpenAI API key (sk-...)",
+                            "",
+                            true,
+                        )? {
                             if !key.is_empty() {
                                 state.app_state.openai_api_key = Some(key);
                                 save_app_state(&state.app_state)?;
@@ -919,7 +1129,12 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                         }
                     }
                     Some(1) => {
-                        if let Some(key) = ui::text_input("Anthropic API Key", "Paste your Anthropic API key", "", true)? {
+                        if let Some(key) = ui::text_input(
+                            "Anthropic API Key",
+                            "Paste your Anthropic API key",
+                            "",
+                            true,
+                        )? {
                             if !key.is_empty() {
                                 state.app_state.anthropic_api_key = Some(key);
                                 save_app_state(&state.app_state)?;
@@ -927,7 +1142,9 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                         }
                     }
                     Some(2) => {
-                        if let Some(key) = ui::text_input("Gemini API Key", "Paste your Gemini API key", "", true)? {
+                        if let Some(key) =
+                            ui::text_input("Gemini API Key", "Paste your Gemini API key", "", true)?
+                        {
                             if !key.is_empty() {
                                 state.app_state.gemini_api_key = Some(key);
                                 save_app_state(&state.app_state)?;
@@ -935,7 +1152,9 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                         }
                     }
                     Some(3) => {
-                        if let Some(key) = ui::text_input("Grok/xAI API Key", "Paste your xAI API key", "", true)? {
+                        if let Some(key) =
+                            ui::text_input("Grok/xAI API Key", "Paste your xAI API key", "", true)?
+                        {
                             if !key.is_empty() {
                                 state.app_state.grok_api_key = Some(key);
                                 save_app_state(&state.app_state)?;
@@ -953,10 +1172,22 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 }
             }
             Some(7) => {
-                let lang_items = vec!["English".to_string(), "한국어".to_string(), "日本語".to_string()];
-                let current = match state.language { Language::English => 0, Language::Korean => 1, Language::Japanese => 2 };
+                let lang_items = vec![
+                    "English".to_string(),
+                    "한국어".to_string(),
+                    "日本語".to_string(),
+                ];
+                let current = match state.language {
+                    Language::English => 0,
+                    Language::Korean => 1,
+                    Language::Japanese => 2,
+                };
                 if let Some(choice) = select_menu("Language", &[], &lang_items, current)? {
-                    state.language = match choice { 1 => Language::Korean, 2 => Language::Japanese, _ => Language::English };
+                    state.language = match choice {
+                        1 => Language::Korean,
+                        2 => Language::Japanese,
+                        _ => Language::English,
+                    };
                     state.app_state.language = Some(state.language);
                     save_app_state(&state.app_state)?;
                 }
@@ -968,7 +1199,13 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                 ];
                 let mut items: Vec<String> = AXIS_DEFINITIONS
                     .iter()
-                    .map(|axis| format!("{} ({:.1})", axis.label, get_axis_weight(&state.axis_weights, axis.key)))
+                    .map(|axis| {
+                        format!(
+                            "{} ({:.1})",
+                            axis.label,
+                            get_axis_weight(&state.axis_weights, axis.key)
+                        )
+                    })
                     .collect();
                 items.push("Reset to defaults".to_string());
                 items.push("Back".to_string());
@@ -982,9 +1219,14 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                             &format!("{:.1}", current),
                             false,
                         )?;
-                        let Some(raw) = value else { continue; };
-                        if raw.is_empty() { continue; }
-                        let weight: f32 = raw.parse().map_err(|_| anyhow!("Invalid weight: {raw}"))?;
+                        let Some(raw) = value else {
+                            continue;
+                        };
+                        if raw.is_empty() {
+                            continue;
+                        }
+                        let weight: f32 =
+                            raw.parse().map_err(|_| anyhow!("Invalid weight: {raw}"))?;
                         if !weight.is_finite() || weight < 0.0 {
                             bail!("Axis weight must be a finite non-negative number.");
                         }
@@ -1019,7 +1261,8 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
                         count_msg
                     ),
                 ];
-                if let Some(0) = select_menu("Clear Reports History", &subtitle, &confirm_items, 1)? {
+                if let Some(0) = select_menu("Clear Reports History", &subtitle, &confirm_items, 1)?
+                {
                     let n = clear_all_reports(&state.out_dir);
                     state.last_html = None;
                     state.last_json = None;
@@ -1039,28 +1282,77 @@ fn run_settings_menu(state: &mut SessionState) -> Result<()> {
 
 async fn run_share_menu(state: &mut SessionState) -> Result<()> {
     let Some(result) = state.last_result.as_ref() else {
-        let _ = select_menu("Share", &["No latest result to share.".to_string()], &["Back".to_string()], 0)?;
+        let _ = select_menu(
+            "Share",
+            &["No latest result to share.".to_string()],
+            &["Back".to_string()],
+            0,
+        )?;
+        return Ok(());
+    };
+    let Some(html_path) = state.last_html.as_ref() else {
+        let _ = select_menu(
+            "Share",
+            &["No latest HTML report to publish.".to_string()],
+            &["Back".to_string()],
+            0,
+        )?;
         return Ok(());
     };
     let bundle = generate_share_bundle(result, &state.out_dir)?;
     loop {
         let subtitle = vec![
             format!("Share folder: {}", bundle.directory),
-            "Choosing a platform copies the caption and opens the prepared local asset.".to_string(),
+            "Choosing a platform publishes the report, copies public links, then opens the platform.".to_string(),
         ];
-        let mut items = bundle.assets.iter().map(|asset| asset.platform.clone()).collect::<Vec<_>>();
+        let mut items = bundle
+            .assets
+            .iter()
+            .map(|asset| asset.platform.clone())
+            .collect::<Vec<_>>();
         items.push("Open share folder".to_string());
         items.push("Back".to_string());
 
         match select_menu("Share Latest Result", &subtitle, &items, 0)? {
             Some(index) if index < bundle.assets.len() => {
                 let asset = &bundle.assets[index];
-                let _ = write_clipboard_text(&asset.caption);
-                if let Some(url) = &asset.open_url {
-                    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-                    let _ = Command::new(opener).arg(url).status();
+                match publish_current_share(result, html_path, &state.out_dir).await {
+                    Ok(published) => {
+                        let clipboard = share_clipboard_text(
+                            &asset.platform,
+                            &asset.caption,
+                            &published.share_page_url,
+                            &published.preview_image_url,
+                            &published.report_url,
+                        );
+                        let _ = write_clipboard_text(&clipboard);
+                        let platform_url = published
+                            .social_links
+                            .iter()
+                            .find(|link| link.platform == asset.platform)
+                            .and_then(|link| link.share_url.as_deref())
+                            .or(asset.open_url.as_deref())
+                            .unwrap_or(&published.share_page_url);
+                        open_path(PathBuf::from(platform_url).as_path())?;
+
+                        let summary = vec![
+                            format!("Share page: {}", published.share_page_url),
+                            format!("Report: {}", published.report_url),
+                            format!("Preview: {}", published.preview_image_url),
+                            "Public share text copied to clipboard.".to_string(),
+                        ];
+                        let _ =
+                            select_menu("Published SNS Share", &summary, &["Back".to_string()], 0);
+                    }
+                    Err(error) => {
+                        let _ = select_menu(
+                            "Publish Failed",
+                            &[format!("{}", error)],
+                            &["Back".to_string()],
+                            0,
+                        );
+                    }
                 }
-                open_path(PathBuf::from(&asset.image_path).as_path())?;
             }
             Some(index) if index == bundle.assets.len() => {
                 open_path(PathBuf::from(&bundle.directory).as_path())?;
@@ -1068,6 +1360,74 @@ async fn run_share_menu(state: &mut SessionState) -> Result<()> {
             _ => return Ok(()),
         }
     }
+}
+
+async fn run_publish_web_menu(state: &mut SessionState) -> Result<()> {
+    let Some(result) = state.last_result.as_ref() else {
+        let _ = select_menu(
+            "Public Web Share",
+            &["No latest result to publish.".to_string()],
+            &["Back".to_string()],
+            0,
+        )?;
+        return Ok(());
+    };
+    let Some(html_path) = state.last_html.as_ref() else {
+        let _ = select_menu(
+            "Public Web Share",
+            &["No latest HTML report to publish.".to_string()],
+            &["Back".to_string()],
+            0,
+        )?;
+        return Ok(());
+    };
+
+    let subtitle = vec![
+        "Publishing report + preview image to the configured Cloudflare endpoint first.".to_string(),
+        "If a publish token is configured, all shared URLs stay on the Cloudflare domain or the publish fails visibly.".to_string(),
+    ];
+    let proceed = select_menu(
+        "Public Web Share",
+        &subtitle,
+        &["Publish now".to_string(), "Cancel".to_string()],
+        0,
+    )?;
+    if !matches!(proceed, Some(0)) {
+        return Ok(());
+    }
+
+    match publish_share_bundle_to_web(result, html_path, &state.out_dir).await {
+        Ok(published) => {
+            persist_published_share(&state.out_dir, &published)?;
+            let _ = write_clipboard_text(&published.share_page_url);
+            let items = vec![
+                "Open public share page".to_string(),
+                "Open public report".to_string(),
+                "Back".to_string(),
+            ];
+            let summary = vec![
+                format!("Share page: {}", published.share_page_url),
+                format!("Report: {}", published.report_url),
+                format!("Preview: {}", published.preview_image_url),
+                format!("Provider: {}", published.provider),
+                "Share URL copied to clipboard.".to_string(),
+            ];
+            match select_menu("Published", &summary, &items, 0)? {
+                Some(0) => open_path(PathBuf::from(&published.share_page_url).as_path())?,
+                Some(1) => open_path(PathBuf::from(&published.report_url).as_path())?,
+                _ => {}
+            }
+        }
+        Err(error) => {
+            let _ = select_menu(
+                "Publish Failed",
+                &[format!("{}", error)],
+                &["Back".to_string()],
+                0,
+            );
+        }
+    }
+    Ok(())
 }
 
 async fn run_interactive_app() -> Result<()> {
@@ -1105,32 +1465,32 @@ async fn run_interactive_app() -> Result<()> {
 
         let mut subtitle = vec![
             format!("BetterThanYou v{}", env!("CARGO_PKG_VERSION")),
-            "Drop two portraits, get a winner-first battle card, then decide what to do next.".to_string(),
+            "Drop two portraits, get a winner-first battle card, then decide what to do next."
+                .to_string(),
             format!("Judge: {}", state.judge.as_str()),
             format!("Model: {}", state.model),
             format!("Output: {}", state.out_dir.display()),
         ];
         if no_keys {
             subtitle.push(String::new());
+            subtitle.push("\u{26A0}  No VLM API key set — running heuristic only.".to_string());
             subtitle.push(
-                "\u{26A0}  No VLM API key set — running heuristic only.".to_string(),
-            );
-            subtitle.push(
-                "   For richer per-axis VLM analysis, add a key in Settings → API keys.".to_string(),
+                "   For richer per-axis VLM analysis, add a key in Settings → API keys."
+                    .to_string(),
             );
         }
         if !star_acknowledged(&state.app_state) {
             subtitle.push(String::new());
-            subtitle.push("\u{2B50} Star one click = dev gets power-up!  github.com/NomaDamas/BetterThanYou".to_string());
+            subtitle.push(
+                "\u{2B50} Star one click = dev gets power-up!  github.com/NomaDamas/BetterThanYou"
+                    .to_string(),
+            );
         }
 
         match select_menu("BetterThanYou", &subtitle, &items, 0)? {
             Some(0) => {
                 if state.left.is_none() || state.right.is_none() {
-                    match ui::battle_input_screen(
-                        state.left.as_deref(),
-                        state.right.as_deref(),
-                    )? {
+                    match ui::battle_input_screen(state.left.as_deref(), state.right.as_deref())? {
                         Some((left, right)) => {
                             state.left = Some(left);
                             state.right = Some(right);
@@ -1145,7 +1505,11 @@ async fn run_interactive_app() -> Result<()> {
                                 false,
                             )? {
                                 let trimmed = label.trim().to_string();
-                                state.left_label = if trimmed.is_empty() { None } else { Some(trimmed) };
+                                state.left_label = if trimmed.is_empty() {
+                                    None
+                                } else {
+                                    Some(trimmed)
+                                };
                             }
                             let right_default = state.right_label.clone().unwrap_or_default();
                             if let Some(label) = ui::text_input(
@@ -1155,7 +1519,11 @@ async fn run_interactive_app() -> Result<()> {
                                 false,
                             )? {
                                 let trimmed = label.trim().to_string();
-                                state.right_label = if trimmed.is_empty() { None } else { Some(trimmed) };
+                                state.right_label = if trimmed.is_empty() {
+                                    None
+                                } else {
+                                    Some(trimmed)
+                                };
                             }
                         }
                         None => continue, // User pressed ESC
@@ -1178,7 +1546,11 @@ async fn run_interactive_app() -> Result<()> {
                     json: false,
                     open: false,
                     no_app: false,
-                    axis_weights: state.axis_weights.iter().map(|(k, v)| format!("{}={}", k, v)).collect(),
+                    axis_weights: state
+                        .axis_weights
+                        .iter()
+                        .map(|(k, v)| format!("{}={}", k, v))
+                        .collect(),
                 };
                 // Set API keys as env vars
                 if let Some(key) = &state.app_state.anthropic_api_key {
@@ -1228,7 +1600,10 @@ async fn run_interactive_app() -> Result<()> {
                     }
                 };
 
-                state.last_pair = Some((state.left.clone().unwrap_or_default(), state.right.clone().unwrap_or_default()));
+                state.last_pair = Some((
+                    state.left.clone().unwrap_or_default(),
+                    state.right.clone().unwrap_or_default(),
+                ));
                 state.last_json = Some(PathBuf::from(&artifacts.json_path));
                 state.last_html = Some(PathBuf::from(&artifacts.html_path));
                 state.last_result = Some(result.clone());
@@ -1257,8 +1632,11 @@ async fn run_interactive_app() -> Result<()> {
                 ) {
                     Ok(ui::BattleViewExit::OpenRequest) => {
                         handle_open_request(
+                            &result,
                             &PathBuf::from(&artifacts.html_path),
-                        )?;
+                            &state.out_dir,
+                        )
+                        .await?;
                     }
                     _ => {}
                 }
@@ -1270,6 +1648,7 @@ async fn run_interactive_app() -> Result<()> {
                         "rematch",
                         "new_portraits",
                         "share_result",
+                        "publish_web",
                         "serve_lan",
                         "open_report",
                         "settings",
@@ -1280,7 +1659,8 @@ async fn run_interactive_app() -> Result<()> {
                     item_keys.push("back");
                     item_keys.push("quit");
 
-                    let next_items: Vec<String> = item_keys.iter().map(|k| t(lang, k).to_string()).collect();
+                    let next_items: Vec<String> =
+                        item_keys.iter().map(|k| t(lang, k).to_string()).collect();
 
                     let next_subtitle = vec![
                         format!("Winner: {}", result.winner.label),
@@ -1302,6 +1682,7 @@ async fn run_interactive_app() -> Result<()> {
                             break;
                         }
                         "share_result" => run_share_menu(&mut state).await?,
+                        "publish_web" => run_publish_web_menu(&mut state).await?,
                         "serve_lan" => {
                             let out_dir = state.out_dir.clone();
                             let _ = select_menu(
@@ -1324,7 +1705,10 @@ async fn run_interactive_app() -> Result<()> {
                             });
                         }
                         "open_report" => {
-                            let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
+                            let path = state
+                                .last_html
+                                .clone()
+                                .unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
                             open_path(&path)?;
                         }
                         "settings" => run_settings_menu(&mut state)?,
@@ -1337,7 +1721,10 @@ async fn run_interactive_app() -> Result<()> {
                 }
             }
             Some(1) => {
-                let path = state.last_html.clone().unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
+                let path = state
+                    .last_html
+                    .clone()
+                    .unwrap_or_else(|| state.out_dir.join("latest-battle.html"));
                 open_path(&path)?;
             }
             Some(2) => run_share_menu(&mut state).await?,
@@ -1369,14 +1756,13 @@ async fn main() -> Result<()> {
             .out_dir
             .clone()
             .or_else(|| {
-                cli.out_dir
-                    .clone()
-                    .or_else(|| match &cli.command {
-                        Some(Commands::Battle(a)) => a.out_dir.clone(),
-                        Some(Commands::Report(a)) => a.out_dir.clone(),
-                        Some(Commands::Open(a)) => a.out_dir.clone(),
-                        _ => None,
-                    })
+                cli.out_dir.clone().or_else(|| match &cli.command {
+                    Some(Commands::Battle(a)) => a.out_dir.clone(),
+                    Some(Commands::Report(a)) => a.out_dir.clone(),
+                    Some(Commands::Open(a)) => a.out_dir.clone(),
+                    Some(Commands::Publish(a)) => a.out_dir.clone(),
+                    _ => None,
+                })
             })
             .unwrap_or_else(default_reports_dir);
         let _ = prune_old_reports(&out_dir, REPORTS_KEEP_RECENT);
@@ -1387,13 +1773,30 @@ async fn main() -> Result<()> {
         Some(Commands::Report(args)) => run_report(args).await,
         Some(Commands::Open(args)) => run_open(args).await,
         Some(Commands::Serve(args)) => run_serve(args),
+        Some(Commands::Publish(args)) => run_publish(args).await,
         None => {
             let app_state = load_app_state();
             maybe_print_star_reminder(&app_state);
-            let has_no_args = cli.left.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
-                && cli.right.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
-                && cli.left_label.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
-                && cli.right_label.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true)
+            let has_no_args = cli
+                .left
+                .as_ref()
+                .map(|v| v.trim().is_empty())
+                .unwrap_or(true)
+                && cli
+                    .right
+                    .as_ref()
+                    .map(|v| v.trim().is_empty())
+                    .unwrap_or(true)
+                && cli
+                    .left_label
+                    .as_ref()
+                    .map(|v| v.trim().is_empty())
+                    .unwrap_or(true)
+                && cli
+                    .right_label
+                    .as_ref()
+                    .map(|v| v.trim().is_empty())
+                    .unwrap_or(true)
                 && !cli.left_clipboard
                 && !cli.right_clipboard
                 && !cli.json
@@ -1441,7 +1844,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn star_acknowledged_requires_gh_source() {
+    fn star_acknowledged_accepts_terminal_or_web_source() {
         let plain_true = AppState {
             star_acknowledged: true,
             star_ack_source: None,
@@ -1455,5 +1858,12 @@ mod tests {
             ..AppState::default()
         };
         assert!(star_acknowledged(&gh_true));
+
+        let web_true = AppState {
+            star_acknowledged: true,
+            star_ack_source: Some("web".to_string()),
+            ..AppState::default()
+        };
+        assert!(star_acknowledged(&web_true));
     }
 }

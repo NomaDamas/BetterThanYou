@@ -37,5 +37,7 @@ test("web api accepts two portrait sources and returns battle result", async () 
 
   assert.equal(response.status, 200);
   assert.equal(payload.data.winner_first, true);
+  assert.match(payload.data.inputs.left.imageDataUrl, /^data:image\/png;base64/);
+  assert.match(payload.data.inputs.right.imageDataUrl, /^data:image\/png;base64/);
   assert.match(payload.meta.reportUrl, /reports/);
 });

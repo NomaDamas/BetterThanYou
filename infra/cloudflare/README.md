@@ -66,7 +66,7 @@ export BTYU_PUBLISH_URL=https://better-than-you.nomadamas.org
 export BTYU_PUBLISH_TOKEN=<the PUBLISH_TOKEN secret>
 ```
 
-`better-than-you publish --copy` will then upload to this Worker first and return a `better-than-you.nomadamas.org/s/<id>.html` URL. If the Worker upload fails, the CLI continues to its existing fallback hosts.
+`better-than-you publish --copy` will then upload to this Worker first and return a `better-than-you.nomadamas.org/s/<id>.html` URL. When `BTYU_PUBLISH_TOKEN` is configured, the publish command keeps the preview image, full report, and share page on this Worker; if the Worker upload fails, the error is shown instead of silently switching SNS links to another host.
 
 ## Lifecycle / Cleanup
 

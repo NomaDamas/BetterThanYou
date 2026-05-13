@@ -35,16 +35,6 @@ async function readJsonBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-function stripEmbeddedImages(result) {
-  return {
-    ...result,
-    inputs: {
-      left: { ...result.inputs.left, imageDataUrl: undefined },
-      right: { ...result.inputs.right, imageDataUrl: undefined }
-    }
-  };
-}
-
 function renderHomePage() {
   return `<!doctype html>
 <html lang="en">
@@ -131,6 +121,22 @@ function renderHomePage() {
         color: var(--text);
         font: inherit;
       }
+      .drop-zone {
+        border: 1px dashed rgba(255,255,255,0.28);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255,255,255,0.04);
+        transition: border-color 140ms ease, background 140ms ease;
+      }
+      .drop-zone.dragging {
+        border-color: var(--accent-2);
+        background: rgba(99,235,211,0.12);
+      }
+      .drop-note {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
       button {
         cursor: pointer;
         background: linear-gradient(135deg, var(--accent), #ffbc5c);
@@ -167,9 +173,10 @@ function renderHomePage() {
       <form id="battle-form" class="grid">
         <section class="panel stack">
           <h2>Left Portrait</h2>
-          <div>
+          <div class="drop-zone" data-side="left">
             <label for="left-file">File</label>
             <input id="left-file" type="file" accept="image/*" />
+            <p class="drop-note">Drag an image here or choose a file.</p>
           </div>
           <div>
             <label for="left-url">URL</label>
@@ -183,9 +190,10 @@ function renderHomePage() {
 
         <section class="panel stack">
           <h2>Right Portrait</h2>
-          <div>
+          <div class="drop-zone" data-side="right">
             <label for="right-file">File</label>
             <input id="right-file" type="file" accept="image/*" />
+            <p class="drop-note">Drag an image here or choose a file.</p>
           </div>
           <div>
             <label for="right-url">URL</label>
@@ -215,6 +223,7 @@ function renderHomePage() {
       const summaryNode = document.querySelector('#summary');
       const viewer = document.querySelector('#viewer');
       const reportLink = document.querySelector('#report-link');
+      const droppedFiles = { left: undefined, right: undefined };
 
       function fileToDataUrl(file) {
         return new Promise((resolve, reject) => {
@@ -226,11 +235,42 @@ function renderHomePage() {
       }
 
       async function pickSource(fileInputId, urlInputId) {
-        const file = document.querySelector(fileInputId).files[0];
+        const side = fileInputId.includes('left') ? 'left' : 'right';
+        const file = droppedFiles[side] || document.querySelector(fileInputId).files[0];
         const url = document.querySelector(urlInputId).value.trim();
         if (file) return fileToDataUrl(file);
         if (url) return url;
         throw new Error('Provide either a file or a URL for each side.');
+      }
+
+      for (const zone of document.querySelectorAll('.drop-zone')) {
+        const side = zone.dataset.side;
+        const input = document.querySelector('#' + side + '-file');
+        const note = zone.querySelector('.drop-note');
+
+        zone.addEventListener('dragover', event => {
+          event.preventDefault();
+          zone.classList.add('dragging');
+        });
+        zone.addEventListener('dragleave', () => {
+          zone.classList.remove('dragging');
+        });
+        zone.addEventListener('drop', event => {
+          event.preventDefault();
+          zone.classList.remove('dragging');
+          const file = event.dataTransfer.files && event.dataTransfer.files[0];
+          if (!file || !file.type.startsWith('image/')) {
+            statusNode.textContent = 'Drop an image file.';
+            return;
+          }
+          droppedFiles[side] = file;
+          input.value = '';
+          note.textContent = 'Dropped: ' + file.name;
+        });
+        input.addEventListener('change', () => {
+          droppedFiles[side] = undefined;
+          note.textContent = input.files[0] ? 'Selected: ' + input.files[0].name : 'Drag an image here or choose a file.';
+        });
       }
 
       form.addEventListener('submit', async event => {
@@ -324,7 +364,7 @@ export function createWebServer({ port = 3000, reportsDir = new URL("../../../re
         const reportUrl = `/reports/${artifacts.htmlPath.split("/").pop()}`;
 
         json(response, 200, {
-          data: stripEmbeddedImages(result),
+          data: result,
           meta: {
             reportUrl,
             reportPath: artifacts.htmlPath,

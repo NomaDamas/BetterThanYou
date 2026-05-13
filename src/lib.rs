@@ -7,10 +7,12 @@ use anyhow::{anyhow, bail, Context, Result};
 use base64::Engine as _;
 use chrono::Utc;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use crossterm::{cursor, execute};
+use font8x8::{UnicodeFonts, BASIC_FONTS};
 use image::{imageops, DynamicImage, ImageDecoder, Rgba, RgbaImage};
-use font8x8::{BASIC_FONTS, UnicodeFonts};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -88,7 +90,11 @@ pub fn clear_all_reports(out_dir: &Path) -> usize {
     }
     // Also wipe latest-* once the user explicitly clears, since they're
     // pointers to artifacts we just deleted.
-    for ptr in &["latest-battle.html", "latest-battle.json", "latest-published.json"] {
+    for ptr in &[
+        "latest-battle.html",
+        "latest-battle.json",
+        "latest-published.json",
+    ] {
         let p = out_dir.join(ptr);
         if p.exists() && fs::remove_file(&p).is_ok() {
             deleted += 1;
@@ -219,11 +225,7 @@ pub const GEMINI_VLM_MODELS: &[&str] = &[
 
 // Source: https://docs.x.ai/docs/models
 // xAI exposes OpenAI-compatible chat completions with vision-capable Grok models.
-pub const GROK_VLM_MODELS: &[&str] = &[
-    "grok-4.3",
-    "grok-4.3-fast",
-    "grok-4.3-mini",
-];
+pub const GROK_VLM_MODELS: &[&str] = &["grok-4.3", "grok-4.3-fast", "grok-4.3-mini"];
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -561,7 +563,11 @@ pub fn localized_axis_desc(lang: Language, key: &str) -> String {
 
 /// Icon for an axis (used in UI).
 pub fn axis_icon(key: &str) -> &'static str {
-    AXIS_DEFINITIONS.iter().find(|a| a.key == key).map(|a| a.icon).unwrap_or("")
+    AXIS_DEFINITIONS
+        .iter()
+        .find(|a| a.key == key)
+        .map(|a| a.icon)
+        .unwrap_or("")
 }
 
 /// Look up localized axis label by axis key.
@@ -592,16 +598,76 @@ pub struct AxisDefinition {
 }
 
 pub const AXIS_DEFINITIONS: [AxisDefinition; 10] = [
-    AxisDefinition { key: "facial_symmetry",     label: "Facial Symmetry",     short: "SYM",   icon: "\u{269C}",   weight: 1.0 }, // ⚜
-    AxisDefinition { key: "facial_proportions",  label: "Facial Proportions",  short: "RATIO", icon: "\u{25C6}",   weight: 1.0 }, // ◆
-    AxisDefinition { key: "skin_quality",        label: "Skin Quality",        short: "SKIN",  icon: "\u{2728}",   weight: 1.0 }, // ✨
-    AxisDefinition { key: "eye_expression",      label: "Eye Expression",      short: "EYES",  icon: "\u{1F441}",  weight: 1.1 }, // 👁
-    AxisDefinition { key: "hair_grooming",       label: "Hair & Grooming",     short: "HAIR",  icon: "\u{2702}",   weight: 0.8 }, // ✂
-    AxisDefinition { key: "bone_structure",      label: "Bone Structure",      short: "BONE",  icon: "\u{1F9B4}",  weight: 0.9 }, // 🦴
-    AxisDefinition { key: "expression_charisma", label: "Expression & Charisma", short: "AURA",  icon: "\u{1F525}",  weight: 1.2 }, // 🔥
-    AxisDefinition { key: "lighting_color",      label: "Lighting & Color",    short: "LIGHT", icon: "\u{1F4A1}",  weight: 1.0 }, // 💡
-    AxisDefinition { key: "background_framing",  label: "Background & Framing", short: "FRAME", icon: "\u{1F5BC}",  weight: 0.8 }, // 🖼
-    AxisDefinition { key: "photogenic_impact",   label: "Photogenic Impact",   short: "IMPACT", icon: "\u{1F4A5}",  weight: 1.3 }, // 💥
+    AxisDefinition {
+        key: "facial_symmetry",
+        label: "Facial Symmetry",
+        short: "SYM",
+        icon: "\u{269C}",
+        weight: 1.0,
+    }, // ⚜
+    AxisDefinition {
+        key: "facial_proportions",
+        label: "Facial Proportions",
+        short: "RATIO",
+        icon: "\u{25C6}",
+        weight: 1.0,
+    }, // ◆
+    AxisDefinition {
+        key: "skin_quality",
+        label: "Skin Quality",
+        short: "SKIN",
+        icon: "\u{2728}",
+        weight: 1.0,
+    }, // ✨
+    AxisDefinition {
+        key: "eye_expression",
+        label: "Eye Expression",
+        short: "EYES",
+        icon: "\u{1F441}",
+        weight: 1.1,
+    }, // 👁
+    AxisDefinition {
+        key: "hair_grooming",
+        label: "Hair & Grooming",
+        short: "HAIR",
+        icon: "\u{2702}",
+        weight: 0.8,
+    }, // ✂
+    AxisDefinition {
+        key: "bone_structure",
+        label: "Bone Structure",
+        short: "BONE",
+        icon: "\u{1F9B4}",
+        weight: 0.9,
+    }, // 🦴
+    AxisDefinition {
+        key: "expression_charisma",
+        label: "Expression & Charisma",
+        short: "AURA",
+        icon: "\u{1F525}",
+        weight: 1.2,
+    }, // 🔥
+    AxisDefinition {
+        key: "lighting_color",
+        label: "Lighting & Color",
+        short: "LIGHT",
+        icon: "\u{1F4A1}",
+        weight: 1.0,
+    }, // 💡
+    AxisDefinition {
+        key: "background_framing",
+        label: "Background & Framing",
+        short: "FRAME",
+        icon: "\u{1F5BC}",
+        weight: 0.8,
+    }, // 🖼
+    AxisDefinition {
+        key: "photogenic_impact",
+        label: "Photogenic Impact",
+        short: "IMPACT",
+        icon: "\u{1F4A5}",
+        weight: 1.3,
+    }, // 💥
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -866,7 +932,12 @@ fn stddev(values: &[f32]) -> f32 {
         return 0.0;
     }
     let mean = average(values);
-    let variance = average(&values.iter().map(|v| (v - mean).powi(2)).collect::<Vec<_>>());
+    let variance = average(
+        &values
+            .iter()
+            .map(|v| (v - mean).powi(2))
+            .collect::<Vec<_>>(),
+    );
     variance.sqrt()
 }
 
@@ -911,7 +982,9 @@ fn hash_signal(hash: &str, index: usize, scale: f32) -> f32 {
 
 fn normalize_source_input(input: &str) -> String {
     let mut value = input.trim().to_string();
-    if (value.starts_with('"') && value.ends_with('"')) || (value.starts_with('\'') && value.ends_with('\'')) {
+    if (value.starts_with('"') && value.ends_with('"'))
+        || (value.starts_with('\'') && value.ends_with('\''))
+    {
         value = value[1..value.len() - 1].to_string();
     }
     if let Some(rest) = value.strip_prefix("file://") {
@@ -944,15 +1017,26 @@ fn label_from_source(source: &str) -> Option<String> {
     let path = Path::new(clean);
     let stem = path.file_stem()?.to_string_lossy().to_string();
     let trimmed = stem.trim().to_string();
-    if trimmed.is_empty() { None } else { Some(trimmed) }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }
 
 fn looks_like_base64(value: &str) -> bool {
-    value.len() > 96 && value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '/' | '=' | '\n' | '\r'))
+    value.len() > 96
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '/' | '=' | '\n' | '\r'))
 }
 
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>> {
-    let response = Client::new().get(url).send().await.with_context(|| format!("failed to fetch {url}"))?;
+    let response = Client::new()
+        .get(url)
+        .send()
+        .await
+        .with_context(|| format!("failed to fetch {url}"))?;
     if !response.status().is_success() {
         bail!("failed to fetch {url}: HTTP {}", response.status());
     }
@@ -962,7 +1046,9 @@ async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>> {
 async fn load_portrait(source: &str, label: Option<&str>, side: &str) -> Result<LoadedPortrait> {
     let normalized = normalize_source_input(source);
     let bytes = if normalized.starts_with("data:image/") {
-        let (_, encoded) = normalized.split_once(',').ok_or_else(|| anyhow!("invalid data URL"))?;
+        let (_, encoded) = normalized
+            .split_once(',')
+            .ok_or_else(|| anyhow!("invalid data URL"))?;
         base64::engine::general_purpose::STANDARD.decode(encoded)?
     } else if normalized.starts_with("http://") || normalized.starts_with("https://") {
         fetch_url_bytes(&normalized).await?
@@ -991,8 +1077,7 @@ async fn load_portrait(source: &str, label: Option<&str>, side: &str) -> Result<
     let orientation = decoder
         .orientation()
         .unwrap_or(image::metadata::Orientation::NoTransforms);
-    let mut image = image::DynamicImage::from_decoder(decoder)
-        .context("failed to decode image")?;
+    let mut image = image::DynamicImage::from_decoder(decoder).context("failed to decode image")?;
     image.apply_orientation(orientation);
 
     // Re-encode to PNG so the data URL has no EXIF, guaranteeing browsers
@@ -1012,7 +1097,15 @@ async fn load_portrait(source: &str, label: Option<&str>, side: &str) -> Result<
     Ok(LoadedPortrait {
         id: side.to_string(),
         label: final_label,
-        source_type: if normalized.starts_with("http") { "url".into() } else if normalized.starts_with("data:image/") { "data-url".into() } else if Path::new(&normalized).exists() { "path".into() } else { "base64".into() },
+        source_type: if normalized.starts_with("http") {
+            "url".into()
+        } else if normalized.starts_with("data:image/") {
+            "data-url".into()
+        } else if Path::new(&normalized).exists() {
+            "path".into()
+        } else {
+            "base64".into()
+        },
         width: image.width(),
         height: image.height(),
         hash,
@@ -1031,7 +1124,11 @@ fn compute_luminance(r: f32, g: f32, b: f32) -> f32 {
 fn compute_saturation(r: f32, g: f32, b: f32) -> f32 {
     let max = r.max(g).max(b) / 255.0;
     let min = r.min(g).min(b) / 255.0;
-    if max == 0.0 { 0.0 } else { (max - min) / max }
+    if max == 0.0 {
+        0.0
+    } else {
+        (max - min) / max
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1048,10 +1145,14 @@ fn sample_grid(image: &DynamicImage, grid_width: u32, grid_height: u32) -> Vec<V
     let rgba = image.to_rgba8();
     let mut rows = Vec::new();
     for row in 0..grid_height {
-        let y = ((row as f32 / (grid_height.saturating_sub(1).max(1)) as f32) * (rgba.height() - 1) as f32).round() as u32;
+        let y = ((row as f32 / (grid_height.saturating_sub(1).max(1)) as f32)
+            * (rgba.height() - 1) as f32)
+            .round() as u32;
         let mut cols = Vec::new();
         for col in 0..grid_width {
-            let x = ((col as f32 / (grid_width.saturating_sub(1).max(1)) as f32) * (rgba.width() - 1) as f32).round() as u32;
+            let x = ((col as f32 / (grid_width.saturating_sub(1).max(1)) as f32)
+                * (rgba.width() - 1) as f32)
+                .round() as u32;
             let pixel = rgba.get_pixel(x, y).0;
             let r = pixel[0] as f32;
             let g = pixel[1] as f32;
@@ -1109,24 +1210,40 @@ fn compute_edge_strength(grid: &[Vec<Sample>]) -> f32 {
 }
 
 fn compute_center_presence(flat: &[Sample]) -> f32 {
-    let center: Vec<f32> = flat.iter().filter(|s| s.center_weight >= 0.55).map(|s| s.saturation * 0.45 + s.luminance * 0.2 + s.center_weight * 0.35).collect();
-    let outer: Vec<f32> = flat.iter().filter(|s| s.center_weight < 0.55).map(|s| s.saturation * 0.4 + s.luminance * 0.2).collect();
+    let center: Vec<f32> = flat
+        .iter()
+        .filter(|s| s.center_weight >= 0.55)
+        .map(|s| s.saturation * 0.45 + s.luminance * 0.2 + s.center_weight * 0.35)
+        .collect();
+    let outer: Vec<f32> = flat
+        .iter()
+        .filter(|s| s.center_weight < 0.55)
+        .map(|s| s.saturation * 0.4 + s.luminance * 0.2)
+        .collect();
     clamp(average(&center) - average(&outer) + 0.55, 0.0, 1.0)
 }
 
 fn compute_palette_mood(flat: &[Sample]) -> f32 {
     let warmth: Vec<f32> = flat.iter().map(|s| (s.r - s.b) / 255.0).collect();
     let vibrance: Vec<f32> = flat.iter().map(|s| s.saturation).collect();
-    clamp((average(&warmth) + 1.0) * 0.25 + average(&vibrance) * 0.65, 0.0, 1.0)
+    clamp(
+        (average(&warmth) + 1.0) * 0.25 + average(&vibrance) * 0.65,
+        0.0,
+        1.0,
+    )
 }
 
 /// Sample a rectangular sub-region of the grid by normalized bounds (0..1).
 /// y0/y1 are vertical bounds (top=0), x0/x1 are horizontal bounds.
 fn region_samples(grid: &[Vec<Sample>], x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<Sample> {
     let h = grid.len();
-    if h == 0 { return Vec::new(); }
+    if h == 0 {
+        return Vec::new();
+    }
     let w = grid[0].len();
-    if w == 0 { return Vec::new(); }
+    if w == 0 {
+        return Vec::new();
+    }
     let row_start = ((y0 * h as f32).max(0.0) as usize).min(h.saturating_sub(1));
     let row_end = ((y1 * h as f32).ceil() as usize).min(h);
     let col_start = ((x0 * w as f32).max(0.0) as usize).min(w.saturating_sub(1));
@@ -1143,9 +1260,13 @@ fn region_samples(grid: &[Vec<Sample>], x0: f32, y0: f32, x1: f32, y1: f32) -> V
 /// Texture variance over a region — used for skin smoothness (low variance = smooth skin).
 fn region_texture_variance(grid: &[Vec<Sample>], x0: f32, y0: f32, x1: f32, y1: f32) -> f32 {
     let h = grid.len();
-    if h == 0 { return 0.0; }
+    if h == 0 {
+        return 0.0;
+    }
     let w = grid[0].len();
-    if w == 0 { return 0.0; }
+    if w == 0 {
+        return 0.0;
+    }
     let row_start = ((y0 * h as f32).max(0.0) as usize).min(h.saturating_sub(1));
     let row_end = ((y1 * h as f32).ceil() as usize).min(h);
     let col_start = ((x0 * w as f32).max(0.0) as usize).min(w.saturating_sub(1));
@@ -1172,9 +1293,13 @@ fn region_edge_density(grid: &[Vec<Sample>], x0: f32, y0: f32, x1: f32, y1: f32)
 /// Symmetry of a horizontal slice (upper or lower half of face).
 fn region_mirror_diff(grid: &[Vec<Sample>], y0: f32, y1: f32) -> f32 {
     let h = grid.len();
-    if h == 0 { return 0.5; }
+    if h == 0 {
+        return 0.5;
+    }
     let w = grid[0].len();
-    if w == 0 { return 0.5; }
+    if w == 0 {
+        return 0.5;
+    }
     let row_start = ((y0 * h as f32).max(0.0) as usize).min(h.saturating_sub(1));
     let row_end = ((y1 * h as f32).ceil() as usize).min(h);
     let mut diffs = Vec::new();
@@ -1194,7 +1319,12 @@ fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]
     let flat = flatten_grid(&grid);
     let luminances: Vec<f32> = flat.iter().map(|s| s.luminance).collect();
     let saturations: Vec<f32> = flat.iter().map(|s| s.saturation).collect();
-    let color_spread = average(&flat.iter().map(|s| stddev(&[s.r / 255.0, s.g / 255.0, s.b / 255.0])).collect::<Vec<_>>());
+    let color_spread = average(
+        &flat
+            .iter()
+            .map(|s| stddev(&[s.r / 255.0, s.g / 255.0, s.b / 255.0]))
+            .collect::<Vec<_>>(),
+    );
     let mirror_difference = compute_mirror_difference(&grid);
     let edge_strength = compute_edge_strength(&grid);
     let center_presence = compute_center_presence(&flat);
@@ -1212,7 +1342,11 @@ fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]
     // Eye region: center, upper portion (30-50% height)
     let eye_samples = region_samples(&grid, 0.25, 0.28, 0.75, 0.48);
     let eye_lums: Vec<f32> = eye_samples.iter().map(|s| s.luminance).collect();
-    let eye_contrast = if eye_lums.is_empty() { 0.0 } else { percentile(&eye_lums, 0.9) - percentile(&eye_lums, 0.1) };
+    let eye_contrast = if eye_lums.is_empty() {
+        0.0
+    } else {
+        percentile(&eye_lums, 0.9) - percentile(&eye_lums, 0.1)
+    };
     let eye_edge = region_edge_density(&grid, 0.25, 0.28, 0.75, 0.48);
 
     // Skin region: cheeks and forehead (lower-middle of face)
@@ -1222,14 +1356,25 @@ fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]
     // Hair region: top 30% of frame
     let hair_edge = region_edge_density(&grid, 0.1, 0.0, 0.9, 0.3);
     let hair_samples = region_samples(&grid, 0.1, 0.0, 0.9, 0.25);
-    let hair_sat_consistency = 1.0 - stddev(&hair_samples.iter().map(|s| s.saturation).collect::<Vec<_>>()).min(1.0);
+    let hair_sat_consistency = 1.0
+        - stddev(
+            &hair_samples
+                .iter()
+                .map(|s| s.saturation)
+                .collect::<Vec<_>>(),
+        )
+        .min(1.0);
 
     // Jawline/bone structure: lower face (60-90% height)
     let jaw_edge = region_edge_density(&grid, 0.2, 0.60, 0.8, 0.90);
     let jaw_contrast = {
         let samples = region_samples(&grid, 0.2, 0.60, 0.8, 0.90);
         let lums: Vec<f32> = samples.iter().map(|s| s.luminance).collect();
-        if lums.is_empty() { 0.0 } else { percentile(&lums, 0.85) - percentile(&lums, 0.15) }
+        if lums.is_empty() {
+            0.0
+        } else {
+            percentile(&lums, 0.85) - percentile(&lums, 0.15)
+        }
     };
 
     // Upper/lower face balance (for proportions)
@@ -1241,13 +1386,25 @@ fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]
     let face_warmth: f32 = if face_samples.is_empty() {
         0.0
     } else {
-        face_samples.iter().map(|s| (s.r - s.b) / 255.0).sum::<f32>() / face_samples.len() as f32
+        face_samples
+            .iter()
+            .map(|s| (s.r - s.b) / 255.0)
+            .sum::<f32>()
+            / face_samples.len() as f32
     };
     let face_saturation_avg = average(&face_sats);
-    let face_luminance_range = if face_lums.is_empty() { 0.0 } else { percentile(&face_lums, 0.9) - percentile(&face_lums, 0.1) };
+    let face_luminance_range = if face_lums.is_empty() {
+        0.0
+    } else {
+        percentile(&face_lums, 0.9) - percentile(&face_lums, 0.1)
+    };
 
     // Background (outer region)
-    let bg_samples: Vec<Sample> = flat.iter().filter(|s| s.center_weight < 0.35).copied().collect();
+    let bg_samples: Vec<Sample> = flat
+        .iter()
+        .filter(|s| s.center_weight < 0.35)
+        .copied()
+        .collect();
     let bg_variance = stddev(&bg_samples.iter().map(|s| s.luminance).collect::<Vec<_>>());
     let bg_quality = clamp(1.0 - bg_variance * 1.5, 0.0, 1.0); // calmer bg = better framing
 
@@ -1256,52 +1413,76 @@ fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]
 
     let facial_symmetry = round(clamp(
         100.0 - mirror_difference * 140.0 + hash_signal(h, 0, 4.0),
-        28.0, 99.0,
+        28.0,
+        99.0,
     ));
 
     let facial_proportions = round(clamp(
         proportion_harmony * 75.0 + center_presence * 20.0 + hash_signal(h, 1, 4.0) + 5.0,
-        25.0, 99.0,
+        25.0,
+        99.0,
     ));
 
     let skin_quality = round(clamp(
         100.0 - skin_variance * 420.0 + skin_color_uniformity * 15.0 + hash_signal(h, 2, 4.0),
-        22.0, 99.0,
+        22.0,
+        99.0,
     ));
 
     let eye_expression = round(clamp(
         eye_contrast * 110.0 + eye_edge * 220.0 + hash_signal(h, 3, 4.0) + 10.0,
-        25.0, 99.0,
+        25.0,
+        99.0,
     ));
 
     let hair_grooming = round(clamp(
         hair_edge * 180.0 + hair_sat_consistency * 30.0 + hash_signal(h, 4, 4.0) + 15.0,
-        22.0, 99.0,
+        22.0,
+        99.0,
     ));
 
     let bone_structure = round(clamp(
         jaw_edge * 200.0 + jaw_contrast * 85.0 + hash_signal(h, 5, 4.0) + 12.0,
-        22.0, 99.0,
+        22.0,
+        99.0,
     ));
 
     let expression_charisma = round(clamp(
-        center_presence * 65.0 + (face_warmth + 1.0) * 18.0 + face_saturation_avg * 35.0 + face_luminance_range * 28.0 + hash_signal(h, 6, 4.0),
-        22.0, 99.0,
+        center_presence * 65.0
+            + (face_warmth + 1.0) * 18.0
+            + face_saturation_avg * 35.0
+            + face_luminance_range * 28.0
+            + hash_signal(h, 6, 4.0),
+        22.0,
+        99.0,
     ));
 
     let lighting_color = round(clamp(
-        dynamic_range * 55.0 + luminance_deviation * 60.0 + average(&saturations) * 45.0 + saturation_deviation * 30.0 + color_spread * 25.0 + hash_signal(h, 7, 4.0),
-        22.0, 99.0,
+        dynamic_range * 55.0
+            + luminance_deviation * 60.0
+            + average(&saturations) * 45.0
+            + saturation_deviation * 30.0
+            + color_spread * 25.0
+            + hash_signal(h, 7, 4.0),
+        22.0,
+        99.0,
     ));
 
     let background_framing = round(clamp(
         center_presence * 70.0 + bg_quality * 35.0 + edge_strength * 14.0 + hash_signal(h, 8, 4.0),
-        22.0, 99.0,
+        22.0,
+        99.0,
     ));
 
     let photogenic_impact = round(clamp(
-        center_presence * 45.0 + palette_mood * 35.0 + dynamic_range * 25.0 + average(&saturations) * 22.0 + (1.0 - mirror_difference) * 18.0 + hash_signal(h, 9, 4.0),
-        22.0, 99.0,
+        center_presence * 45.0
+            + palette_mood * 35.0
+            + dynamic_range * 25.0
+            + average(&saturations) * 22.0
+            + (1.0 - mirror_difference) * 18.0
+            + hash_signal(h, 9, 4.0),
+        22.0,
+        99.0,
     ));
 
     let axes = AxisScores {
@@ -1330,7 +1511,10 @@ fn score_portrait(portrait: &LoadedPortrait, axis_definitions: &[AxisDefinition]
 }
 
 fn compute_total_from_axes(axes: &AxisScores, axis_definitions: &[AxisDefinition]) -> f32 {
-    let weighted: f32 = axis_definitions.iter().map(|axis| axes.get(axis.key) * axis.weight).sum();
+    let weighted: f32 = axis_definitions
+        .iter()
+        .map(|axis| axes.get(axis.key) * axis.weight)
+        .sum();
     let weights: f32 = axis_definitions.iter().map(|axis| axis.weight).sum();
     if weights <= 0.0 {
         return 0.0;
@@ -1353,19 +1537,28 @@ fn axis_definitions_with_overrides(overrides: &[(String, f32)]) -> Result<Vec<Ax
 }
 
 fn build_axis_cards(left_scores: &ScoreBundle, right_scores: &ScoreBundle) -> Vec<AxisCard> {
-    AXIS_DEFINITIONS.iter().map(|axis| {
-        let left = left_scores.axes.get(axis.key);
-        let right = right_scores.axes.get(axis.key);
-        let leader = if (left - right).abs() < f32::EPSILON { "tie" } else if left > right { "left" } else { "right" };
-        AxisCard {
-            key: axis.key.to_string(),
-            label: axis.label.to_string(),
-            left,
-            right,
-            diff: round((left - right).abs()),
-            leader: leader.to_string(),
-        }
-    }).collect()
+    AXIS_DEFINITIONS
+        .iter()
+        .map(|axis| {
+            let left = left_scores.axes.get(axis.key);
+            let right = right_scores.axes.get(axis.key);
+            let leader = if (left - right).abs() < f32::EPSILON {
+                "tie"
+            } else if left > right {
+                "left"
+            } else {
+                "right"
+            };
+            AxisCard {
+                key: axis.key.to_string(),
+                label: axis.label.to_string(),
+                left,
+                right,
+                diff: round((left - right).abs()),
+                leader: leader.to_string(),
+            }
+        })
+        .collect()
 }
 
 fn rank_axes(scores: &AxisScores) -> Vec<AxisDefinition> {
@@ -1374,12 +1567,32 @@ fn rank_axes(scores: &AxisScores) -> Vec<AxisDefinition> {
     axes
 }
 
-fn build_battle_narrative(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: &ScoreBundle, right_scores: &ScoreBundle, winner: &Winner, axis_cards: &[AxisCard]) -> BattleSections {
+fn build_battle_narrative(
+    left: &LoadedPortrait,
+    right: &LoadedPortrait,
+    left_scores: &ScoreBundle,
+    right_scores: &ScoreBundle,
+    winner: &Winner,
+    axis_cards: &[AxisCard],
+) -> BattleSections {
     let left_ranked = rank_axes(&left_scores.axes);
     let right_ranked = rank_axes(&right_scores.axes);
-    let lead_axes: Vec<&AxisCard> = axis_cards.iter().filter(|card| card.leader == winner.id).collect();
-    let decisive = lead_axes.iter().max_by(|a, b| a.diff.partial_cmp(&b.diff).unwrap()).copied().unwrap_or(&axis_cards[0]);
-    let margin_word = if winner.margin >= 8.0 { "clear" } else if winner.margin >= 4.0 { "controlled" } else { "narrow" };
+    let lead_axes: Vec<&AxisCard> = axis_cards
+        .iter()
+        .filter(|card| card.leader == winner.id)
+        .collect();
+    let decisive = lead_axes
+        .iter()
+        .max_by(|a, b| a.diff.partial_cmp(&b.diff).unwrap())
+        .copied()
+        .unwrap_or(&axis_cards[0]);
+    let margin_word = if winner.margin >= 8.0 {
+        "clear"
+    } else if winner.margin >= 4.0 {
+        "controlled"
+    } else {
+        "narrow"
+    };
 
     BattleSections {
         overall_take: format!("{} takes the battle with a {} edge, landing at {:.1} to {:.1}. The biggest pressure points were {} and the overall style read.", winner.label, margin_word, winner.total_score, winner.opponent_score, decisive.label.to_lowercase()),
@@ -1396,21 +1609,49 @@ fn build_battle_narrative(left: &LoadedPortrait, right: &LoadedPortrait, left_sc
     }
 }
 
-fn pick_winner(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: &ScoreBundle, right_scores: &ScoreBundle, axis_cards: &[AxisCard], preferred: Option<&str>) -> String {
+fn pick_winner(
+    left: &LoadedPortrait,
+    right: &LoadedPortrait,
+    left_scores: &ScoreBundle,
+    right_scores: &ScoreBundle,
+    axis_cards: &[AxisCard],
+    preferred: Option<&str>,
+) -> String {
     if let Some(value) = preferred {
         if value == "left" || value == "right" {
             return value.to_string();
         }
     }
     if (left_scores.total - right_scores.total).abs() < f32::EPSILON {
-        let left_leads = axis_cards.iter().filter(|card| card.leader == "left").count();
-        let right_leads = axis_cards.iter().filter(|card| card.leader == "right").count();
+        let left_leads = axis_cards
+            .iter()
+            .filter(|card| card.leader == "left")
+            .count();
+        let right_leads = axis_cards
+            .iter()
+            .filter(|card| card.leader == "right")
+            .count();
         if left_leads == right_leads {
-            return if left.hash > right.hash { "left" } else { "right" }.to_string();
+            return if left.hash > right.hash {
+                "left"
+            } else {
+                "right"
+            }
+            .to_string();
         }
-        return if left_leads > right_leads { "left" } else { "right" }.to_string();
+        return if left_leads > right_leads {
+            "left"
+        } else {
+            "right"
+        }
+        .to_string();
     }
-    if left_scores.total > right_scores.total { "left" } else { "right" }.to_string()
+    if left_scores.total > right_scores.total {
+        "left"
+    } else {
+        "right"
+    }
+    .to_string()
 }
 
 /// Make a VLM provider's error message safe to embed in user-facing prose:
@@ -1427,10 +1668,7 @@ fn sanitize_fallback_reason(raw: &str) -> String {
             _ => {}
         }
     }
-    let collapsed: String = out
-        .split_whitespace()
-        .collect::<Vec<&str>>()
-        .join(" ");
+    let collapsed: String = out.split_whitespace().collect::<Vec<&str>>().join(" ");
     if collapsed.len() > 240 {
         let mut truncated: String = collapsed.chars().take(237).collect();
         truncated.push('…');
@@ -1440,19 +1678,53 @@ fn sanitize_fallback_reason(raw: &str) -> String {
     }
 }
 
-fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: ScoreBundle, right_scores: ScoreBundle, sections: BattleSections, judge_mode: JudgeMode, provider: &str, model: Option<String>, preferred_winner: Option<&str>, fallback: Option<String>) -> BattleResult {
+fn build_result(
+    left: &LoadedPortrait,
+    right: &LoadedPortrait,
+    left_scores: ScoreBundle,
+    right_scores: ScoreBundle,
+    sections: BattleSections,
+    judge_mode: JudgeMode,
+    provider: &str,
+    model: Option<String>,
+    preferred_winner: Option<&str>,
+    fallback: Option<String>,
+) -> BattleResult {
     let axis_cards = build_axis_cards(&left_scores, &right_scores);
-    let winner_id = pick_winner(left, right, &left_scores, &right_scores, &axis_cards, preferred_winner);
+    let winner_id = pick_winner(
+        left,
+        right,
+        &left_scores,
+        &right_scores,
+        &axis_cards,
+        preferred_winner,
+    );
     let winner_left = winner_id == "left";
     let winner = Winner {
         id: winner_id.clone(),
-        label: if winner_left { left.label.clone() } else { right.label.clone() },
-        total_score: if winner_left { left_scores.total } else { right_scores.total },
-        opponent_score: if winner_left { right_scores.total } else { left_scores.total },
+        label: if winner_left {
+            left.label.clone()
+        } else {
+            right.label.clone()
+        },
+        total_score: if winner_left {
+            left_scores.total
+        } else {
+            right_scores.total
+        },
+        opponent_score: if winner_left {
+            right_scores.total
+        } else {
+            left_scores.total
+        },
         margin: round((left_scores.total - right_scores.total).abs()),
         decisive: (left_scores.total - right_scores.total).abs() >= 6.0,
     };
-    let battle_id = format!("{}-{}", Utc::now().format("%Y-%m-%dt%H-%M-%S-%3fz"), slugify(&format!("{}-{}", left.label, right.label)));
+    let battle_id = format!(
+        "{}-{}",
+        Utc::now().format("%Y-%m-%dt%H-%M-%S-%3fz"),
+        slugify(&format!("{}-{}", left.label, right.label))
+    );
     let mut final_sections = sections;
     if let Some(fallback_reason) = fallback {
         let cleaned = sanitize_fallback_reason(&fallback_reason);
@@ -1469,20 +1741,47 @@ fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: Scor
         engine: EngineMeta {
             version: match judge_mode {
                 JudgeMode::Heuristic => ENGINE_VERSION.to_string(),
-                JudgeMode::Auto => if provider == "local" { ENGINE_VERSION.to_string() } else { format!("{}-{}", provider, model.clone().unwrap_or_default()) },
+                JudgeMode::Auto => {
+                    if provider == "local" {
+                        ENGINE_VERSION.to_string()
+                    } else {
+                        format!("{}-{}", provider, model.clone().unwrap_or_default())
+                    }
+                }
                 JudgeMode::Openai => format!("openai-{}", model.clone().unwrap_or_default()),
                 JudgeMode::Anthropic => format!("anthropic-{}", model.clone().unwrap_or_default()),
                 JudgeMode::Gemini => format!("gemini-{}", model.clone().unwrap_or_default()),
                 JudgeMode::Grok => format!("grok-{}", model.clone().unwrap_or_default()),
             },
-            qualitative_sections: vec!["overall_take", "strengths", "weaknesses", "why_this_won", "model_jury_notes"].into_iter().map(str::to_string).collect(),
+            qualitative_sections: vec![
+                "overall_take",
+                "strengths",
+                "weaknesses",
+                "why_this_won",
+                "model_jury_notes",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
             judge_mode: judge_mode.as_str().to_string(),
             provider: provider.to_string(),
             model,
         },
         winner_first: true,
-        quantitative_axes: AXIS_DEFINITIONS.iter().map(|axis| axis.key.to_string()).collect(),
-        qualitative_sections: vec!["overall_take", "strengths", "weaknesses", "why_this_won", "model_jury_notes"].into_iter().map(str::to_string).collect(),
+        quantitative_axes: AXIS_DEFINITIONS
+            .iter()
+            .map(|axis| axis.key.to_string())
+            .collect(),
+        qualitative_sections: vec![
+            "overall_take",
+            "strengths",
+            "weaknesses",
+            "why_this_won",
+            "model_jury_notes",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect(),
         inputs: BattleInputs {
             left: PortraitRef {
                 id: left.id.clone(),
@@ -1503,7 +1802,10 @@ fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: Scor
                 image_data_url: right.image_data_url.clone(),
             },
         },
-        scores: SideScores { left: left_scores, right: right_scores },
+        scores: SideScores {
+            left: left_scores,
+            right: right_scores,
+        },
         dual_scores: None,
         axis_cards,
         winner,
@@ -1512,9 +1814,24 @@ fn build_result(left: &LoadedPortrait, right: &LoadedPortrait, left_scores: Scor
     }
 }
 
-async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
-    let api_key = config.api_key.clone().or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok()).or_else(|| std::env::var("OPENAI_API_KEY").ok()).ok_or_else(|| anyhow!("OpenAI judging requires OPENAI_API_KEY or BTY_OPENAI_API_KEY"))?;
-    let base_url = config.base_url.clone().or_else(|| std::env::var("OPENAI_BASE_URL").ok()).unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+async fn judge_with_openai(
+    left: &LoadedPortrait,
+    right: &LoadedPortrait,
+    model: &str,
+    config: &OpenAiConfig,
+    lang: Language,
+) -> Result<OpenAiJudgeOutput> {
+    let api_key = config
+        .api_key
+        .clone()
+        .or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok())
+        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+        .ok_or_else(|| anyhow!("OpenAI judging requires OPENAI_API_KEY or BTY_OPENAI_API_KEY"))?;
+    let base_url = config
+        .base_url
+        .clone()
+        .or_else(|| std::env::var("OPENAI_BASE_URL").ok())
+        .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
 
     let schema = json!({
         "type": "object",
@@ -1582,17 +1899,41 @@ async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model:
         .await?;
 
     if !response.status().is_success() {
-        bail!("OpenAI judge failed: HTTP {} {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "OpenAI judge failed: HTTP {} {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
     let payload: Value = response.json().await?;
-    let output_text = payload.get("output_text").and_then(Value::as_str).map(str::to_string).or_else(|| {
-        payload.get("output")?.as_array()?.iter().flat_map(|item| item.get("content").and_then(Value::as_array).into_iter().flatten()).find_map(|content| content.get("text").and_then(Value::as_str)).map(str::to_string)
-    }).ok_or_else(|| anyhow!("OpenAI judge returned no output text"))?;
+    let output_text = payload
+        .get("output_text")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            payload
+                .get("output")?
+                .as_array()?
+                .iter()
+                .flat_map(|item| {
+                    item.get("content")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                })
+                .find_map(|content| content.get("text").and_then(Value::as_str))
+                .map(str::to_string)
+        })
+        .ok_or_else(|| anyhow!("OpenAI judge returned no output text"))?;
 
     let parsed: Value = serde_json::from_str(&output_text)?;
     let parse_axes = |key: &str| -> AxisScores {
-        let scores = parsed.get(key).and_then(Value::as_object).cloned().unwrap_or_default();
+        let scores = parsed
+            .get(key)
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
         let mut out = AxisScores::default();
         for axis in AXIS_DEFINITIONS.iter() {
             let v = round(scores.get(axis.key).and_then(Value::as_f64).unwrap_or(0.0) as f32);
@@ -1601,23 +1942,58 @@ async fn judge_with_openai(left: &LoadedPortrait, right: &LoadedPortrait, model:
         out
     };
 
-    let sections = parsed.get("sections").and_then(Value::as_object).ok_or_else(|| anyhow!("OpenAI judge missing sections object"))?;
+    let sections = parsed
+        .get("sections")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("OpenAI judge missing sections object"))?;
     Ok(OpenAiJudgeOutput {
-        winner_id: parsed.get("winner_id").and_then(Value::as_str).unwrap_or("left").to_string(),
+        winner_id: parsed
+            .get("winner_id")
+            .and_then(Value::as_str)
+            .unwrap_or("left")
+            .to_string(),
         left_scores: parse_axes("left_scores"),
         right_scores: parse_axes("right_scores"),
         sections: BattleSections {
-            overall_take: sections.get("overall_take").and_then(Value::as_str).unwrap_or_default().to_string(),
+            overall_take: sections
+                .get("overall_take")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
             strengths: SideTexts {
-                left: sections.get("strengths_left").and_then(Value::as_str).unwrap_or_default().to_string(),
-                right: sections.get("strengths_right").and_then(Value::as_str).unwrap_or_default().to_string(),
+                left: sections
+                    .get("strengths_left")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                right: sections
+                    .get("strengths_right")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
             },
             weaknesses: SideTexts {
-                left: sections.get("weaknesses_left").and_then(Value::as_str).unwrap_or_default().to_string(),
-                right: sections.get("weaknesses_right").and_then(Value::as_str).unwrap_or_default().to_string(),
+                left: sections
+                    .get("weaknesses_left")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                right: sections
+                    .get("weaknesses_right")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
             },
-            why_this_won: sections.get("why_this_won").and_then(Value::as_str).unwrap_or_default().to_string(),
-            model_jury_notes: sections.get("model_jury_notes").and_then(Value::as_str).unwrap_or_default().to_string(),
+            why_this_won: sections
+                .get("why_this_won")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            model_jury_notes: sections
+                .get("model_jury_notes")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
         },
         provider: "openai".to_string(),
         model: model.to_string(),
@@ -1640,7 +2016,11 @@ fn parse_data_url(data_url: &str) -> (String, String) {
 }
 
 fn parse_vlm_axes(parsed: &Value, key: &str) -> AxisScores {
-    let scores = parsed.get(key).and_then(Value::as_object).cloned().unwrap_or_default();
+    let scores = parsed
+        .get(key)
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
     let mut out = AxisScores::default();
     for axis in AXIS_DEFINITIONS.iter() {
         let v = round(scores.get(axis.key).and_then(Value::as_f64).unwrap_or(0.0) as f32);
@@ -1650,19 +2030,50 @@ fn parse_vlm_axes(parsed: &Value, key: &str) -> AxisScores {
 }
 
 fn parse_vlm_sections(parsed: &Value) -> Result<BattleSections> {
-    let sections = parsed.get("sections").and_then(Value::as_object).ok_or_else(|| anyhow!("VLM judge missing sections object"))?;
+    let sections = parsed
+        .get("sections")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("VLM judge missing sections object"))?;
     Ok(BattleSections {
-        overall_take: sections.get("overall_take").and_then(Value::as_str).unwrap_or_default().to_string(),
+        overall_take: sections
+            .get("overall_take")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
         strengths: SideTexts {
-            left: sections.get("strengths_left").and_then(Value::as_str).unwrap_or_default().to_string(),
-            right: sections.get("strengths_right").and_then(Value::as_str).unwrap_or_default().to_string(),
+            left: sections
+                .get("strengths_left")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            right: sections
+                .get("strengths_right")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
         },
         weaknesses: SideTexts {
-            left: sections.get("weaknesses_left").and_then(Value::as_str).unwrap_or_default().to_string(),
-            right: sections.get("weaknesses_right").and_then(Value::as_str).unwrap_or_default().to_string(),
+            left: sections
+                .get("weaknesses_left")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            right: sections
+                .get("weaknesses_right")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
         },
-        why_this_won: sections.get("why_this_won").and_then(Value::as_str).unwrap_or_default().to_string(),
-        model_jury_notes: sections.get("model_jury_notes").and_then(Value::as_str).unwrap_or_default().to_string(),
+        why_this_won: sections
+            .get("why_this_won")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        model_jury_notes: sections
+            .get("model_jury_notes")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
     })
 }
 
@@ -1685,7 +2096,8 @@ fn vlm_json_prompt(lang: Language) -> String {
             "why_this_won": "",
             "model_jury_notes": ""
         }
-    })).unwrap_or_default();
+    }))
+    .unwrap_or_default();
 
     let axis_descriptions = AXIS_DEFINITIONS
         .iter()
@@ -1726,11 +2138,21 @@ fn vlm_json_prompt(lang: Language) -> String {
     )
 }
 
-async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
-    let api_key = config.api_key.clone()
+async fn judge_with_anthropic(
+    left: &LoadedPortrait,
+    right: &LoadedPortrait,
+    model: &str,
+    config: &OpenAiConfig,
+    lang: Language,
+) -> Result<OpenAiJudgeOutput> {
+    let api_key = config
+        .api_key
+        .clone()
         .or_else(|| std::env::var("BTY_ANTHROPIC_API_KEY").ok())
         .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-        .ok_or_else(|| anyhow!("Anthropic judging requires ANTHROPIC_API_KEY or BTY_ANTHROPIC_API_KEY"))?;
+        .ok_or_else(|| {
+            anyhow!("Anthropic judging requires ANTHROPIC_API_KEY or BTY_ANTHROPIC_API_KEY")
+        })?;
 
     let (left_media_type, left_b64) = parse_data_url(&left.image_data_url);
     let (right_media_type, right_b64) = parse_data_url(&right.image_data_url);
@@ -1761,7 +2183,11 @@ async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, mod
         .await?;
 
     if !response.status().is_success() {
-        bail!("Anthropic judge failed: HTTP {} {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "Anthropic judge failed: HTTP {} {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
     let payload: Value = response.json().await?;
@@ -1773,11 +2199,19 @@ async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, mod
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("Anthropic judge returned no output text"))?;
 
-    let parsed: Value = serde_json::from_str(output_text)
-        .with_context(|| format!("Failed to parse Anthropic JSON response: {}", &output_text[..output_text.len().min(200)]))?;
+    let parsed: Value = serde_json::from_str(output_text).with_context(|| {
+        format!(
+            "Failed to parse Anthropic JSON response: {}",
+            &output_text[..output_text.len().min(200)]
+        )
+    })?;
 
     Ok(OpenAiJudgeOutput {
-        winner_id: parsed.get("winner_id").and_then(Value::as_str).unwrap_or("left").to_string(),
+        winner_id: parsed
+            .get("winner_id")
+            .and_then(Value::as_str)
+            .unwrap_or("left")
+            .to_string(),
         left_scores: parse_vlm_axes(&parsed, "left_scores"),
         right_scores: parse_vlm_axes(&parsed, "right_scores"),
         sections: parse_vlm_sections(&parsed)?,
@@ -1786,8 +2220,16 @@ async fn judge_with_anthropic(left: &LoadedPortrait, right: &LoadedPortrait, mod
     })
 }
 
-async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
-    let api_key = config.api_key.clone()
+async fn judge_with_gemini(
+    left: &LoadedPortrait,
+    right: &LoadedPortrait,
+    model: &str,
+    config: &OpenAiConfig,
+    lang: Language,
+) -> Result<OpenAiJudgeOutput> {
+    let api_key = config
+        .api_key
+        .clone()
         .or_else(|| std::env::var("BTY_GEMINI_API_KEY").ok())
         .or_else(|| std::env::var("GEMINI_API_KEY").ok())
         .ok_or_else(|| anyhow!("Gemini judging requires GEMINI_API_KEY or BTY_GEMINI_API_KEY"))?;
@@ -1824,7 +2266,11 @@ async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model:
         .await?;
 
     if !response.status().is_success() {
-        bail!("Gemini judge failed: HTTP {} {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "Gemini judge failed: HTTP {} {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
     let payload: Value = response.json().await?;
@@ -1840,11 +2286,19 @@ async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model:
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("Gemini judge returned no output text"))?;
 
-    let parsed: Value = serde_json::from_str(output_text)
-        .with_context(|| format!("Failed to parse Gemini JSON response: {}", &output_text[..output_text.len().min(200)]))?;
+    let parsed: Value = serde_json::from_str(output_text).with_context(|| {
+        format!(
+            "Failed to parse Gemini JSON response: {}",
+            &output_text[..output_text.len().min(200)]
+        )
+    })?;
 
     Ok(OpenAiJudgeOutput {
-        winner_id: parsed.get("winner_id").and_then(Value::as_str).unwrap_or("left").to_string(),
+        winner_id: parsed
+            .get("winner_id")
+            .and_then(Value::as_str)
+            .unwrap_or("left")
+            .to_string(),
         left_scores: parse_vlm_axes(&parsed, "left_scores"),
         right_scores: parse_vlm_axes(&parsed, "right_scores"),
         sections: parse_vlm_sections(&parsed)?,
@@ -1853,12 +2307,22 @@ async fn judge_with_gemini(left: &LoadedPortrait, right: &LoadedPortrait, model:
     })
 }
 
-async fn judge_with_grok(left: &LoadedPortrait, right: &LoadedPortrait, model: &str, config: &OpenAiConfig, lang: Language) -> Result<OpenAiJudgeOutput> {
-    let api_key = config.api_key.clone()
+async fn judge_with_grok(
+    left: &LoadedPortrait,
+    right: &LoadedPortrait,
+    model: &str,
+    config: &OpenAiConfig,
+    lang: Language,
+) -> Result<OpenAiJudgeOutput> {
+    let api_key = config
+        .api_key
+        .clone()
         .or_else(|| std::env::var("BTY_GROK_API_KEY").ok())
         .or_else(|| std::env::var("GROK_API_KEY").ok())
         .or_else(|| std::env::var("XAI_API_KEY").ok())
-        .ok_or_else(|| anyhow!("Grok judging requires XAI_API_KEY, GROK_API_KEY, or BTY_GROK_API_KEY"))?;
+        .ok_or_else(|| {
+            anyhow!("Grok judging requires XAI_API_KEY, GROK_API_KEY, or BTY_GROK_API_KEY")
+        })?;
     let base_url = std::env::var("XAI_BASE_URL")
         .or_else(|_| std::env::var("GROK_BASE_URL"))
         .unwrap_or_else(|_| "https://api.x.ai/v1".to_string());
@@ -1879,7 +2343,10 @@ async fn judge_with_grok(left: &LoadedPortrait, right: &LoadedPortrait, model: &
 
     let client = Client::new();
     let response = client
-        .post(format!("{}/chat/completions", base_url.trim_end_matches('/')))
+        .post(format!(
+            "{}/chat/completions",
+            base_url.trim_end_matches('/')
+        ))
         .bearer_auth(api_key)
         .header("content-type", "application/json")
         .json(&body)
@@ -1887,7 +2354,11 @@ async fn judge_with_grok(left: &LoadedPortrait, right: &LoadedPortrait, model: &
         .await?;
 
     if !response.status().is_success() {
-        bail!("Grok judge failed: HTTP {} {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "Grok judge failed: HTTP {} {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
     let payload: Value = response.json().await?;
@@ -1900,11 +2371,19 @@ async fn judge_with_grok(left: &LoadedPortrait, right: &LoadedPortrait, model: &
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("Grok judge returned no output text"))?;
 
-    let parsed: Value = serde_json::from_str(output_text)
-        .with_context(|| format!("Failed to parse Grok JSON response: {}", &output_text[..output_text.len().min(200)]))?;
+    let parsed: Value = serde_json::from_str(output_text).with_context(|| {
+        format!(
+            "Failed to parse Grok JSON response: {}",
+            &output_text[..output_text.len().min(200)]
+        )
+    })?;
 
     Ok(OpenAiJudgeOutput {
-        winner_id: parsed.get("winner_id").and_then(Value::as_str).unwrap_or("left").to_string(),
+        winner_id: parsed
+            .get("winner_id")
+            .and_then(Value::as_str)
+            .unwrap_or("left")
+            .to_string(),
         left_scores: parse_vlm_axes(&parsed, "left_scores"),
         right_scores: parse_vlm_axes(&parsed, "right_scores"),
         sections: parse_vlm_sections(&parsed)?,
@@ -1913,10 +2392,18 @@ async fn judge_with_grok(left: &LoadedPortrait, right: &LoadedPortrait, model: &
     })
 }
 
-pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, openai_override: Option<OpenAiJudgeOutput>) -> Result<BattleResult> {
+pub async fn analyze_portrait_battle_with_override(
+    options: AnalyzeOptions,
+    openai_override: Option<OpenAiJudgeOutput>,
+) -> Result<BattleResult> {
     let axis_definitions = axis_definitions_with_overrides(&options.axis_weights)?;
     let left = load_portrait(&options.left_source, options.left_label.as_deref(), "left").await?;
-    let right = load_portrait(&options.right_source, options.right_label.as_deref(), "right").await?;
+    let right = load_portrait(
+        &options.right_source,
+        options.right_label.as_deref(),
+        "right",
+    )
+    .await?;
     let lang = options.language;
 
     // ── Always run heuristic first (fast, deterministic) ────────────────
@@ -1928,10 +2415,20 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
     };
 
     // ── Determine VLM provider ──────────────────────────────────────────
-    let openai_key_present = options.openai_config.api_key.clone().or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok()).or_else(|| std::env::var("OPENAI_API_KEY").ok()).is_some();
-    let anthropic_key_present = std::env::var("BTY_ANTHROPIC_API_KEY").is_ok() || std::env::var("ANTHROPIC_API_KEY").is_ok();
-    let gemini_key_present = std::env::var("BTY_GEMINI_API_KEY").is_ok() || std::env::var("GEMINI_API_KEY").is_ok();
-    let grok_key_present = std::env::var("BTY_GROK_API_KEY").is_ok() || std::env::var("GROK_API_KEY").is_ok() || std::env::var("XAI_API_KEY").is_ok();
+    let openai_key_present = options
+        .openai_config
+        .api_key
+        .clone()
+        .or_else(|| std::env::var("BTY_OPENAI_API_KEY").ok())
+        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+        .is_some();
+    let anthropic_key_present = std::env::var("BTY_ANTHROPIC_API_KEY").is_ok()
+        || std::env::var("ANTHROPIC_API_KEY").is_ok();
+    let gemini_key_present =
+        std::env::var("BTY_GEMINI_API_KEY").is_ok() || std::env::var("GEMINI_API_KEY").is_ok();
+    let grok_key_present = std::env::var("BTY_GROK_API_KEY").is_ok()
+        || std::env::var("GROK_API_KEY").is_ok()
+        || std::env::var("XAI_API_KEY").is_ok();
 
     let vlm_mode = match options.judge_mode {
         JudgeMode::Openai => Some(JudgeMode::Openai),
@@ -1939,11 +2436,17 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
         JudgeMode::Gemini => Some(JudgeMode::Gemini),
         JudgeMode::Grok => Some(JudgeMode::Grok),
         JudgeMode::Auto => {
-            if openai_key_present { Some(JudgeMode::Openai) }
-            else if anthropic_key_present { Some(JudgeMode::Anthropic) }
-            else if gemini_key_present { Some(JudgeMode::Gemini) }
-            else if grok_key_present { Some(JudgeMode::Grok) }
-            else { None }
+            if openai_key_present {
+                Some(JudgeMode::Openai)
+            } else if anthropic_key_present {
+                Some(JudgeMode::Anthropic)
+            } else if gemini_key_present {
+                Some(JudgeMode::Gemini)
+            } else if grok_key_present {
+                Some(JudgeMode::Grok)
+            } else {
+                None
+            }
         }
         JudgeMode::Heuristic => None,
     };
@@ -1961,17 +2464,45 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
                 if let Some(override_result) = openai_override {
                     Ok(override_result)
                 } else {
-                    judge_with_openai(&left, &right, &options.openai_model, &options.openai_config, lang).await
+                    judge_with_openai(
+                        &left,
+                        &right,
+                        &options.openai_model,
+                        &options.openai_config,
+                        lang,
+                    )
+                    .await
                 }
             }
             JudgeMode::Anthropic => {
-                judge_with_anthropic(&left, &right, &options.openai_model, &options.openai_config, lang).await
+                judge_with_anthropic(
+                    &left,
+                    &right,
+                    &options.openai_model,
+                    &options.openai_config,
+                    lang,
+                )
+                .await
             }
             JudgeMode::Gemini => {
-                judge_with_gemini(&left, &right, &options.openai_model, &options.openai_config, lang).await
+                judge_with_gemini(
+                    &left,
+                    &right,
+                    &options.openai_model,
+                    &options.openai_config,
+                    lang,
+                )
+                .await
             }
             JudgeMode::Grok => {
-                judge_with_grok(&left, &right, &options.openai_model, &options.openai_config, lang).await
+                judge_with_grok(
+                    &left,
+                    &right,
+                    &options.openai_model,
+                    &options.openai_config,
+                    lang,
+                )
+                .await
             }
             _ => unreachable!(),
         };
@@ -1993,60 +2524,111 @@ pub async fn analyze_portrait_battle_with_override(options: AnalyzeOptions, open
     }
 
     // ── Build dual scores and select official combined scores ───────────
-    let (final_left_scores, final_right_scores, dual_scores, sections, winner_hint): (ScoreBundle, ScoreBundle, Option<DualScores>, BattleSections, Option<String>) =
-        if let Some(vlm) = vlm_output.as_ref() {
-            // Build VLM side scores
-            let vlm_left_bundle = ScoreBundle {
-                axes: vlm.left_scores.clone(),
-                total: round(compute_total_from_axes(&vlm.left_scores, &axis_definitions)),
-                telemetry: None,
-            };
-            let vlm_right_bundle = ScoreBundle {
-                axes: vlm.right_scores.clone(),
-                total: round(compute_total_from_axes(&vlm.right_scores, &axis_definitions)),
-                telemetry: None,
-            };
-            let vlm_side_scores = SideScores { left: vlm_left_bundle.clone(), right: vlm_right_bundle.clone() };
-
-            // Combined = 30% heuristic + 70% VLM, preserving heuristic telemetry
-            let combined_left_axes = heuristic_left.axes.blend(&vlm_left_bundle.axes, 0.30, 0.70);
-            let combined_right_axes = heuristic_right.axes.blend(&vlm_right_bundle.axes, 0.30, 0.70);
-            let combined_left = ScoreBundle {
-                total: round(compute_total_from_axes(&combined_left_axes, &axis_definitions)),
-                axes: combined_left_axes,
-                telemetry: heuristic_left.telemetry.clone(),
-            };
-            let combined_right = ScoreBundle {
-                total: round(compute_total_from_axes(&combined_right_axes, &axis_definitions)),
-                axes: combined_right_axes,
-                telemetry: heuristic_right.telemetry.clone(),
-            };
-
-            let dual = DualScores {
-                heuristic: heuristic_side_scores.clone(),
-                vlm: Some(vlm_side_scores),
-            };
-            (combined_left, combined_right, Some(dual), vlm.sections.clone(), Some(vlm.winner_id.clone()))
-        } else {
-            let sections = {
-                let axis_cards_tmp = build_axis_cards(&heuristic_left, &heuristic_right);
-                let winner_id_tmp = pick_winner(&left, &right, &heuristic_left, &heuristic_right, &axis_cards_tmp, None);
-                let winner_tmp = Winner {
-                    id: winner_id_tmp.clone(),
-                    label: if winner_id_tmp == "left" { left.label.clone() } else { right.label.clone() },
-                    total_score: if winner_id_tmp == "left" { heuristic_left.total } else { heuristic_right.total },
-                    opponent_score: if winner_id_tmp == "left" { heuristic_right.total } else { heuristic_left.total },
-                    margin: round((heuristic_left.total - heuristic_right.total).abs()),
-                    decisive: (heuristic_left.total - heuristic_right.total).abs() >= 6.0,
-                };
-                build_battle_narrative(&left, &right, &heuristic_left, &heuristic_right, &winner_tmp, &axis_cards_tmp)
-            };
-            let dual = DualScores {
-                heuristic: heuristic_side_scores.clone(),
-                vlm: None,
-            };
-            (heuristic_left, heuristic_right, Some(dual), sections, None)
+    let (final_left_scores, final_right_scores, dual_scores, sections, winner_hint): (
+        ScoreBundle,
+        ScoreBundle,
+        Option<DualScores>,
+        BattleSections,
+        Option<String>,
+    ) = if let Some(vlm) = vlm_output.as_ref() {
+        // Build VLM side scores
+        let vlm_left_bundle = ScoreBundle {
+            axes: vlm.left_scores.clone(),
+            total: round(compute_total_from_axes(&vlm.left_scores, &axis_definitions)),
+            telemetry: None,
         };
+        let vlm_right_bundle = ScoreBundle {
+            axes: vlm.right_scores.clone(),
+            total: round(compute_total_from_axes(
+                &vlm.right_scores,
+                &axis_definitions,
+            )),
+            telemetry: None,
+        };
+        let vlm_side_scores = SideScores {
+            left: vlm_left_bundle.clone(),
+            right: vlm_right_bundle.clone(),
+        };
+
+        // Combined = 30% heuristic + 70% VLM, preserving heuristic telemetry
+        let combined_left_axes = heuristic_left.axes.blend(&vlm_left_bundle.axes, 0.30, 0.70);
+        let combined_right_axes = heuristic_right
+            .axes
+            .blend(&vlm_right_bundle.axes, 0.30, 0.70);
+        let combined_left = ScoreBundle {
+            total: round(compute_total_from_axes(
+                &combined_left_axes,
+                &axis_definitions,
+            )),
+            axes: combined_left_axes,
+            telemetry: heuristic_left.telemetry.clone(),
+        };
+        let combined_right = ScoreBundle {
+            total: round(compute_total_from_axes(
+                &combined_right_axes,
+                &axis_definitions,
+            )),
+            axes: combined_right_axes,
+            telemetry: heuristic_right.telemetry.clone(),
+        };
+
+        let dual = DualScores {
+            heuristic: heuristic_side_scores.clone(),
+            vlm: Some(vlm_side_scores),
+        };
+        (
+            combined_left,
+            combined_right,
+            Some(dual),
+            vlm.sections.clone(),
+            Some(vlm.winner_id.clone()),
+        )
+    } else {
+        let sections = {
+            let axis_cards_tmp = build_axis_cards(&heuristic_left, &heuristic_right);
+            let winner_id_tmp = pick_winner(
+                &left,
+                &right,
+                &heuristic_left,
+                &heuristic_right,
+                &axis_cards_tmp,
+                None,
+            );
+            let winner_tmp = Winner {
+                id: winner_id_tmp.clone(),
+                label: if winner_id_tmp == "left" {
+                    left.label.clone()
+                } else {
+                    right.label.clone()
+                },
+                total_score: if winner_id_tmp == "left" {
+                    heuristic_left.total
+                } else {
+                    heuristic_right.total
+                },
+                opponent_score: if winner_id_tmp == "left" {
+                    heuristic_right.total
+                } else {
+                    heuristic_left.total
+                },
+                margin: round((heuristic_left.total - heuristic_right.total).abs()),
+                decisive: (heuristic_left.total - heuristic_right.total).abs() >= 6.0,
+            };
+            build_battle_narrative(
+                &left,
+                &right,
+                &heuristic_left,
+                &heuristic_right,
+                &winner_tmp,
+                &axis_cards_tmp,
+            )
+        };
+        let dual = DualScores {
+            heuristic: heuristic_side_scores.clone(),
+            vlm: None,
+        };
+        (heuristic_left, heuristic_right, Some(dual), sections, None)
+    };
 
     let mut result = build_result(
         &left,
@@ -2093,33 +2675,71 @@ fn lang_from_code(code: Option<&str>) -> Language {
 
 /// Letter rank + CSS color class from a 0-100 score.
 fn score_rank_html(score: f32) -> (&'static str, &'static str) {
-    if score >= 95.0 { ("S+", "rank-splus") }
-    else if score >= 90.0 { ("S", "rank-s") }
-    else if score >= 80.0 { ("A", "rank-a") }
-    else if score >= 70.0 { ("B", "rank-b") }
-    else if score >= 60.0 { ("C", "rank-c") }
-    else if score >= 50.0 { ("D", "rank-d") }
-    else { ("F", "rank-f") }
+    if score >= 95.0 {
+        ("S+", "rank-splus")
+    } else if score >= 90.0 {
+        ("S", "rank-s")
+    } else if score >= 80.0 {
+        ("A", "rank-a")
+    } else if score >= 70.0 {
+        ("B", "rank-b")
+    } else if score >= 60.0 {
+        ("C", "rank-c")
+    } else if score >= 50.0 {
+        ("D", "rank-d")
+    } else {
+        ("F", "rank-f")
+    }
 }
 
 /// One-line verdict summary based on margin size (localized).
 fn verdict_phrase(lang: Language, margin: f32, winner_label: &str, loser_label: &str) -> String {
-    let intensity = if margin >= 15.0 { "crushing" }
-        else if margin >= 8.0 { "clear" }
-        else if margin >= 4.0 { "controlled" }
-        else { "narrow" };
+    let intensity = if margin >= 15.0 {
+        "crushing"
+    } else if margin >= 8.0 {
+        "clear"
+    } else if margin >= 4.0 {
+        "controlled"
+    } else {
+        "narrow"
+    };
     match (lang, intensity) {
-        (Language::Korean, "crushing") => format!("{}이(가) {}을(를) 압도적으로 이겼습니다", winner_label, loser_label),
-        (Language::Korean, "clear") => format!("{}이(가) {}보다 확실히 앞섰습니다", winner_label, loser_label),
-        (Language::Korean, "controlled") => format!("{}이(가) 안정적으로 {}을(를) 이겼습니다", winner_label, loser_label),
-        (Language::Korean, _) => format!("{}이(가) 근소한 차이로 {}을(를) 이겼습니다", winner_label, loser_label),
-        (Language::Japanese, "crushing") => format!("{}が{}を圧倒的に打ち破った", winner_label, loser_label),
-        (Language::Japanese, "clear") => format!("{}が{}を明確に上回った", winner_label, loser_label),
-        (Language::Japanese, "controlled") => format!("{}が{}を着実に制した", winner_label, loser_label),
+        (Language::Korean, "crushing") => format!(
+            "{}이(가) {}을(를) 압도적으로 이겼습니다",
+            winner_label, loser_label
+        ),
+        (Language::Korean, "clear") => format!(
+            "{}이(가) {}보다 확실히 앞섰습니다",
+            winner_label, loser_label
+        ),
+        (Language::Korean, "controlled") => format!(
+            "{}이(가) 안정적으로 {}을(를) 이겼습니다",
+            winner_label, loser_label
+        ),
+        (Language::Korean, _) => format!(
+            "{}이(가) 근소한 차이로 {}을(를) 이겼습니다",
+            winner_label, loser_label
+        ),
+        (Language::Japanese, "crushing") => {
+            format!("{}が{}を圧倒的に打ち破った", winner_label, loser_label)
+        }
+        (Language::Japanese, "clear") => {
+            format!("{}が{}を明確に上回った", winner_label, loser_label)
+        }
+        (Language::Japanese, "controlled") => {
+            format!("{}が{}を着実に制した", winner_label, loser_label)
+        }
         (Language::Japanese, _) => format!("{}が{}をわずかに上回った", winner_label, loser_label),
-        (_, "crushing") => format!("{} CRUSHED {}", winner_label.to_uppercase(), loser_label.to_uppercase()),
+        (_, "crushing") => format!(
+            "{} CRUSHED {}",
+            winner_label.to_uppercase(),
+            loser_label.to_uppercase()
+        ),
         (_, "clear") => format!("{} clearly outpaced {}", winner_label, loser_label),
-        (_, "controlled") => format!("{} controlled the battle over {}", winner_label, loser_label),
+        (_, "controlled") => format!(
+            "{} controlled the battle over {}",
+            winner_label, loser_label
+        ),
         (_, _) => format!("{} narrowly edged out {}", winner_label, loser_label),
     }
 }
@@ -2265,7 +2885,10 @@ pub fn render_html_report(result: &BattleResult) -> String {
     );
 
     let decisive_badge = if result.winner.decisive {
-        format!(r#"<span class="decisive-badge">{}</span>"#, html_escape(t(lang, "report_decisive")))
+        format!(
+            r#"<span class="decisive-badge">{}</span>"#,
+            html_escape(t(lang, "report_decisive"))
+        )
     } else {
         String::new()
     };
@@ -2274,13 +2897,34 @@ pub fn render_html_report(result: &BattleResult) -> String {
     let (loser_rank, loser_rank_class) = score_rank_html(result.winner.opponent_score);
     let (left_rank_str, left_rank_class_str) = score_rank_html(result.scores.left.total);
     let (right_rank_str, right_rank_class_str) = score_rank_html(result.scores.right.total);
-    let loser_label = if left_is_winner { &result.inputs.right.label } else { &result.inputs.left.label };
-    let verdict = verdict_phrase(lang, result.winner.margin, &result.winner.label, loser_label);
+    let loser_label = if left_is_winner {
+        &result.inputs.right.label
+    } else {
+        &result.inputs.left.label
+    };
+    let verdict = verdict_phrase(
+        lang,
+        result.winner.margin,
+        &result.winner.label,
+        loser_label,
+    );
 
     // ── Summary counts ──────────────────────────────────────────────────
-    let left_wins_count = result.axis_cards.iter().filter(|c| c.leader == "left").count();
-    let right_wins_count = result.axis_cards.iter().filter(|c| c.leader == "right").count();
-    let tie_count = result.axis_cards.iter().filter(|c| c.leader == "tie").count();
+    let left_wins_count = result
+        .axis_cards
+        .iter()
+        .filter(|c| c.leader == "left")
+        .count();
+    let right_wins_count = result
+        .axis_cards
+        .iter()
+        .filter(|c| c.leader == "right")
+        .count();
+    let tie_count = result
+        .axis_cards
+        .iter()
+        .filter(|c| c.leader == "tie")
+        .count();
 
     // ── Summary comparison table ────────────────────────────────────────
     let summary_table = {
@@ -2840,12 +3484,20 @@ pub fn render_html_report(result: &BattleResult) -> String {
         loser_label = html_escape(loser_label),
         winner_total = result.winner.total_score,
         loser_total = result.winner.opponent_score,
-        wrank = winner_rank, wrc = winner_rank_class,
-        lrank = loser_rank, lrc = loser_rank_class,
+        wrank = winner_rank,
+        wrc = winner_rank_class,
+        lrank = loser_rank,
+        lrc = loser_rank_class,
         verdict = html_escape(&verdict),
         winner_label_text = html_escape(t(lang, "report_winner")),
         score_label = html_escape(t(lang, "report_score")),
-        judge = html_escape(&result.engine.model.clone().unwrap_or_else(|| result.engine.judge_mode.clone())),
+        judge = html_escape(
+            &result
+                .engine
+                .model
+                .clone()
+                .unwrap_or_else(|| result.engine.judge_mode.clone())
+        ),
         overall = html_escape(&result.sections.overall_take),
         why = html_escape(&result.sections.why_this_won),
         notes = html_escape(&result.sections.model_jury_notes),
@@ -2863,8 +3515,16 @@ pub fn render_html_report(result: &BattleResult) -> String {
         right_rank_class = right_rank_class_str,
         left_winner_class = if left_is_winner { "is-winner" } else { "" },
         right_winner_class = if right_is_winner { "is-winner" } else { "" },
-        left_crown = if left_is_winner { r#"<div class="crown">👑</div>"# } else { "" },
-        right_crown = if right_is_winner { r#"<div class="crown">👑</div>"# } else { "" },
+        left_crown = if left_is_winner {
+            r#"<div class="crown">👑</div>"#
+        } else {
+            ""
+        },
+        right_crown = if right_is_winner {
+            r#"<div class="crown">👑</div>"#
+        } else {
+            ""
+        },
         decisive = decisive_badge,
         dual_dashboard = dual_dashboard,
         summary_table = summary_table,
@@ -2893,7 +3553,10 @@ pub fn save_battle_artifacts(result: &BattleResult, output_dir: &Path) -> Result
         "{}-{}-wins-{}",
         Utc::now().format("%Y-%m-%dt%H-%M-%S-%3fz"),
         winner_side,
-        slugify(&format!("{}-vs-{}", result.inputs.left.label, result.inputs.right.label)),
+        slugify(&format!(
+            "{}-vs-{}",
+            result.inputs.left.label, result.inputs.right.label
+        )),
     );
     let html_path = output_dir.join(format!("{}.html", stem));
     let json_path = output_dir.join(format!("{}.json", stem));
@@ -2913,13 +3576,20 @@ pub fn save_battle_artifacts(result: &BattleResult, output_dir: &Path) -> Result
     })
 }
 
-pub fn regenerate_battle_report(battle_json_path: &Path, output_dir: &Path) -> Result<SavedArtifacts> {
+pub fn regenerate_battle_report(
+    battle_json_path: &Path,
+    output_dir: &Path,
+) -> Result<SavedArtifacts> {
     let result: BattleResult = serde_json::from_slice(&fs::read(battle_json_path)?)?;
     save_battle_artifacts(&result, output_dir)
 }
 
 pub fn open_path(path: &Path) -> Result<()> {
-    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     Command::new(opener).arg(path).status()?;
     Ok(())
 }
@@ -3001,8 +3671,16 @@ fn draw_text_8x8(image: &mut RgbaImage, x: u32, y: u32, text: &str, color: Rgba<
 
 fn share_caption(result: &BattleResult, platform: &str) -> String {
     // Pick top-3 axes the winner led in for a juicy caption
-    let mut lead_axes: Vec<&AxisCard> = result.axis_cards.iter().filter(|c| c.leader == result.winner.id).collect();
-    lead_axes.sort_by(|a, b| b.diff.partial_cmp(&a.diff).unwrap_or(std::cmp::Ordering::Equal));
+    let mut lead_axes: Vec<&AxisCard> = result
+        .axis_cards
+        .iter()
+        .filter(|c| c.leader == result.winner.id)
+        .collect();
+    lead_axes.sort_by(|a, b| {
+        b.diff
+            .partial_cmp(&a.diff)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let top_axes_text = lead_axes
         .iter()
         .take(3)
@@ -3011,7 +3689,11 @@ fn share_caption(result: &BattleResult, platform: &str) -> String {
         .join(", ");
 
     let (rank, _) = score_rank_html(result.winner.total_score);
-    let decisive_suffix = if result.winner.decisive { " 🔥 DECISIVE WIN" } else { "" };
+    let decisive_suffix = if result.winner.decisive {
+        " 🔥 DECISIVE WIN"
+    } else {
+        ""
+    };
 
     let core = format!(
         "🏆 {} wins the BetterThanYou portrait battle!\n\n⚔️ {} ({:.1}) vs {} ({:.1})\n📊 Margin: +{:.1} pts · Rank {}{}\n✨ Top strengths: {}",
@@ -3028,8 +3710,14 @@ fn share_caption(result: &BattleResult, platform: &str) -> String {
 
     match platform {
         "x" => format!("{}\n\n#BetterThanYou #AIPortraits #PortraitBattle", core),
-        "linkedin" => format!("{}\n\nGenerated with BetterThanYou — CLI portrait battle tool. #AI #Portraits", core),
-        "instagram_post" => format!("{}\n\n#BetterThanYou #PortraitBattle #AIPortraits #AIArt", core),
+        "linkedin" => format!(
+            "{}\n\nGenerated with BetterThanYou — CLI portrait battle tool. #AI #Portraits",
+            core
+        ),
+        "instagram_post" => format!(
+            "{}\n\n#BetterThanYou #PortraitBattle #AIPortraits #AIArt",
+            core
+        ),
         "instagram_story" => format!("{}\n\n#BetterThanYou", core),
         "tiktok" => format!("{}\n\n#BetterThanYou #AIPortraits #FYP", core),
         "pinterest" => format!("{}\n\nBetterThanYou portrait battle.", core),
@@ -3062,7 +3750,13 @@ fn share_note(platform: &str) -> &'static str {
     }
 }
 
-pub fn share_clipboard_text(platform: &str, caption: &str, share_page_url: &str, preview_image_url: &str, report_url: &str) -> String {
+pub fn share_clipboard_text(
+    platform: &str,
+    caption: &str,
+    share_page_url: &str,
+    preview_image_url: &str,
+    report_url: &str,
+) -> String {
     match platform {
         "x" | "linkedin" | "pinterest" => format!("{caption}\n\n{share_page_url}"),
         "instagram_post" | "instagram_story" | "tiktok" => {
@@ -3072,7 +3766,11 @@ pub fn share_clipboard_text(platform: &str, caption: &str, share_page_url: &str,
     }
 }
 
-fn build_social_share_links(page_url: &str, preview_image_url: &str, caption: &str) -> Vec<SocialShareLink> {
+fn build_social_share_links(
+    page_url: &str,
+    preview_image_url: &str,
+    caption: &str,
+) -> Vec<SocialShareLink> {
     let page = urlencoding::encode(page_url);
     let media = urlencoding::encode(preview_image_url);
     let description = urlencoding::encode(caption);
@@ -3132,27 +3830,44 @@ fn decode_portrait_for_share(data_url: &str, max_w: u32, max_h: u32) -> RgbaImag
         .decode(data_url.split(',').nth(1).unwrap_or(""))
         .unwrap_or_default();
     let img = image::load_from_memory(&bytes).unwrap_or_else(|_| DynamicImage::new_rgba8(64, 64));
-    img.resize(max_w, max_h, imageops::FilterType::Triangle).to_rgba8()
+    img.resize(max_w, max_h, imageops::FilterType::Triangle)
+        .to_rgba8()
 }
 
 fn rank_color_rgba(score: f32) -> Rgba<u8> {
-    if score >= 95.0 { Rgba([255, 179, 255, 255]) }
-    else if score >= 90.0 { Rgba([255, 211, 107, 255]) }
-    else if score >= 80.0 { Rgba([80, 255, 120, 255]) }
-    else if score >= 70.0 { Rgba([99, 235, 211, 255]) }
-    else if score >= 60.0 { Rgba([255, 143, 66, 255]) }
-    else if score >= 50.0 { Rgba([255, 128, 128, 255]) }
-    else { Rgba([150, 150, 150, 255]) }
+    if score >= 95.0 {
+        Rgba([255, 179, 255, 255])
+    } else if score >= 90.0 {
+        Rgba([255, 211, 107, 255])
+    } else if score >= 80.0 {
+        Rgba([80, 255, 120, 255])
+    } else if score >= 70.0 {
+        Rgba([99, 235, 211, 255])
+    } else if score >= 60.0 {
+        Rgba([255, 143, 66, 255])
+    } else if score >= 50.0 {
+        Rgba([255, 128, 128, 255])
+    } else {
+        Rgba([150, 150, 150, 255])
+    }
 }
 
 fn rank_letter(score: f32) -> &'static str {
-    if score >= 95.0 { "S+" }
-    else if score >= 90.0 { "S" }
-    else if score >= 80.0 { "A" }
-    else if score >= 70.0 { "B" }
-    else if score >= 60.0 { "C" }
-    else if score >= 50.0 { "D" }
-    else { "F" }
+    if score >= 95.0 {
+        "S+"
+    } else if score >= 90.0 {
+        "S"
+    } else if score >= 80.0 {
+        "A"
+    } else if score >= 70.0 {
+        "B"
+    } else if score >= 60.0 {
+        "C"
+    } else if score >= 50.0 {
+        "D"
+    } else {
+        "F"
+    }
 }
 
 fn render_share_image(result: &BattleResult, platform: &str) -> RgbaImage {
@@ -3173,55 +3888,195 @@ fn render_share_image(result: &BattleResult, platform: &str) -> RgbaImage {
     // Top accent bar
     draw_block(&mut canvas, 0, 0, width, 14, Rgba([255, 140, 66, 255]));
     // Bottom accent bar
-    draw_block(&mut canvas, 0, height.saturating_sub(8), width, 8, Rgba([99, 235, 211, 255]));
+    draw_block(
+        &mut canvas,
+        0,
+        height.saturating_sub(8),
+        width,
+        8,
+        Rgba([99, 235, 211, 255]),
+    );
 
     // ── Header ───────────────────────────────────────────────────────
     let header_y = 36u32;
-    draw_text_8x8(&mut canvas, 28, header_y, "BETTERTHANYOU", Rgba([255, 255, 255, 255]), 3);
-    draw_text_8x8(&mut canvas, 28, header_y + 36, "PORTRAIT BATTLE", Rgba([200, 200, 220, 255]), 1);
+    draw_text_8x8(
+        &mut canvas,
+        28,
+        header_y,
+        "BETTERTHANYOU",
+        Rgba([255, 255, 255, 255]),
+        3,
+    );
+    draw_text_8x8(
+        &mut canvas,
+        28,
+        header_y + 36,
+        "PORTRAIT BATTLE",
+        Rgba([200, 200, 220, 255]),
+        1,
+    );
 
     // Winner badge
     let winner_text = format!("WINNER: {}", result.winner.label.to_uppercase());
-    draw_text_8x8(&mut canvas, 28, header_y + 60, &winner_text, Rgba([255, 207, 90, 255]), 2);
+    draw_text_8x8(
+        &mut canvas,
+        28,
+        header_y + 60,
+        &winner_text,
+        Rgba([255, 207, 90, 255]),
+        2,
+    );
     let rank = rank_letter(result.winner.total_score);
     let rank_col = rank_color_rgba(result.winner.total_score);
-    draw_text_8x8(&mut canvas, 28, header_y + 88, &format!("RANK {}", rank), rank_col, 2);
+    draw_text_8x8(
+        &mut canvas,
+        28,
+        header_y + 88,
+        &format!("RANK {}", rank),
+        rank_col,
+        2,
+    );
 
     // ── Photos: side-by-side, fitted to preserve aspect ratio ───────
     let photo_area_y: u32 = header_y + 130;
     let photo_max_w = (width / 2).saturating_sub(40);
-    let photo_max_h = if height >= 1500 { 600 } else { (height as f32 * 0.35) as u32 };
+    let photo_max_h = if height >= 1500 {
+        600
+    } else {
+        (height as f32 * 0.35) as u32
+    };
 
-    let left_img = decode_portrait_for_share(&result.inputs.left.image_data_url, photo_max_w, photo_max_h);
-    let right_img = decode_portrait_for_share(&result.inputs.right.image_data_url, photo_max_w, photo_max_h);
+    let left_img =
+        decode_portrait_for_share(&result.inputs.left.image_data_url, photo_max_w, photo_max_h);
+    let right_img = decode_portrait_for_share(
+        &result.inputs.right.image_data_url,
+        photo_max_w,
+        photo_max_h,
+    );
 
     let left_x = ((width / 4) as i32 - (left_img.width() / 2) as i32).max(20) as i64;
-    let right_x = ((width as i32 * 3 / 4) - (right_img.width() / 2) as i32).max((width / 2 + 20) as i32) as i64;
+    let right_x = ((width as i32 * 3 / 4) - (right_img.width() / 2) as i32)
+        .max((width / 2 + 20) as i32) as i64;
 
     // Draw black frames behind photos
-    draw_block(&mut canvas, left_x as u32, photo_area_y, left_img.width() + 8, left_img.height() + 8, Rgba([0, 0, 0, 255]));
-    draw_block(&mut canvas, right_x as u32, photo_area_y, right_img.width() + 8, right_img.height() + 8, Rgba([0, 0, 0, 255]));
+    draw_block(
+        &mut canvas,
+        left_x as u32,
+        photo_area_y,
+        left_img.width() + 8,
+        left_img.height() + 8,
+        Rgba([0, 0, 0, 255]),
+    );
+    draw_block(
+        &mut canvas,
+        right_x as u32,
+        photo_area_y,
+        right_img.width() + 8,
+        right_img.height() + 8,
+        Rgba([0, 0, 0, 255]),
+    );
 
     imageops::overlay(&mut canvas, &left_img, left_x + 4, photo_area_y as i64 + 4);
-    imageops::overlay(&mut canvas, &right_img, right_x + 4, photo_area_y as i64 + 4);
+    imageops::overlay(
+        &mut canvas,
+        &right_img,
+        right_x + 4,
+        photo_area_y as i64 + 4,
+    );
 
     // Winner glow border (gold rectangle)
-    let winner_x = if result.winner.id == "left" { left_x } else { right_x };
-    let winner_w = if result.winner.id == "left" { left_img.width() + 8 } else { right_img.width() + 8 };
-    let winner_h = if result.winner.id == "left" { left_img.height() + 8 } else { right_img.height() + 8 };
+    let winner_x = if result.winner.id == "left" {
+        left_x
+    } else {
+        right_x
+    };
+    let winner_w = if result.winner.id == "left" {
+        left_img.width() + 8
+    } else {
+        right_img.width() + 8
+    };
+    let winner_h = if result.winner.id == "left" {
+        left_img.height() + 8
+    } else {
+        right_img.height() + 8
+    };
     let gold = Rgba([255, 211, 107, 255]);
     let bw = 4u32;
-    draw_block(&mut canvas, winner_x as u32, photo_area_y, winner_w, bw, gold); // top
-    draw_block(&mut canvas, winner_x as u32, photo_area_y + winner_h - bw, winner_w, bw, gold); // bottom
-    draw_block(&mut canvas, winner_x as u32, photo_area_y, bw, winner_h, gold); // left
-    draw_block(&mut canvas, winner_x as u32 + winner_w - bw, photo_area_y, bw, winner_h, gold); // right
+    draw_block(
+        &mut canvas,
+        winner_x as u32,
+        photo_area_y,
+        winner_w,
+        bw,
+        gold,
+    ); // top
+    draw_block(
+        &mut canvas,
+        winner_x as u32,
+        photo_area_y + winner_h - bw,
+        winner_w,
+        bw,
+        gold,
+    ); // bottom
+    draw_block(
+        &mut canvas,
+        winner_x as u32,
+        photo_area_y,
+        bw,
+        winner_h,
+        gold,
+    ); // left
+    draw_block(
+        &mut canvas,
+        winner_x as u32 + winner_w - bw,
+        photo_area_y,
+        bw,
+        winner_h,
+        gold,
+    ); // right
 
     // Photo labels (filename) below each photo
     let label_y = photo_area_y + photo_max_h + 16;
-    draw_text_8x8(&mut canvas, left_x as u32, label_y, &result.inputs.left.label.to_uppercase(), Rgba([255, 143, 66, 255]), 2);
-    draw_text_8x8(&mut canvas, left_x as u32, label_y + 24, &format!("{:.1}  {}", result.scores.left.total, rank_letter(result.scores.left.total)), Rgba([255, 255, 255, 255]), 3);
-    draw_text_8x8(&mut canvas, right_x as u32, label_y, &result.inputs.right.label.to_uppercase(), Rgba([100, 180, 255, 255]), 2);
-    draw_text_8x8(&mut canvas, right_x as u32, label_y + 24, &format!("{:.1}  {}", result.scores.right.total, rank_letter(result.scores.right.total)), Rgba([255, 255, 255, 255]), 3);
+    draw_text_8x8(
+        &mut canvas,
+        left_x as u32,
+        label_y,
+        &result.inputs.left.label.to_uppercase(),
+        Rgba([255, 143, 66, 255]),
+        2,
+    );
+    draw_text_8x8(
+        &mut canvas,
+        left_x as u32,
+        label_y + 24,
+        &format!(
+            "{:.1}  {}",
+            result.scores.left.total,
+            rank_letter(result.scores.left.total)
+        ),
+        Rgba([255, 255, 255, 255]),
+        3,
+    );
+    draw_text_8x8(
+        &mut canvas,
+        right_x as u32,
+        label_y,
+        &result.inputs.right.label.to_uppercase(),
+        Rgba([100, 180, 255, 255]),
+        2,
+    );
+    draw_text_8x8(
+        &mut canvas,
+        right_x as u32,
+        label_y + 24,
+        &format!(
+            "{:.1}  {}",
+            result.scores.right.total,
+            rank_letter(result.scores.right.total)
+        ),
+        Rgba([255, 255, 255, 255]),
+        3,
+    );
 
     // ── Axis bars (only for tall formats) ────────────────────────────
     let bar_y_start = label_y + 80;
@@ -3232,11 +4087,20 @@ fn render_share_image(result: &BattleResult, platform: &str) -> RgbaImage {
     if space_for_bars >= needed.min(300) {
         for (i, card) in result.axis_cards.iter().enumerate() {
             let y = bar_y_start + (i as u32) * row_spacing;
-            if y + row_spacing > height - 60 { break; }
+            if y + row_spacing > height - 60 {
+                break;
+            }
 
             // Axis label
             let short = localized_axis_short(Language::English, &card.key);
-            draw_text_8x8(&mut canvas, 32, y, &short.to_uppercase(), Rgba([255, 214, 107, 255]), 2);
+            draw_text_8x8(
+                &mut canvas,
+                32,
+                y,
+                &short.to_uppercase(),
+                Rgba([255, 214, 107, 255]),
+                2,
+            );
 
             // Bar geometry
             let bar_left_x: u32 = 140;
@@ -3246,27 +4110,81 @@ fn render_share_image(result: &BattleResult, platform: &str) -> RgbaImage {
             let by = y + 6;
 
             // Background tracks
-            draw_block(&mut canvas, bar_left_x, by, bar_max_w, bar_h, Rgba([35, 40, 55, 255]));
-            draw_block(&mut canvas, bar_right_x, by, bar_max_w, bar_h, Rgba([35, 40, 55, 255]));
+            draw_block(
+                &mut canvas,
+                bar_left_x,
+                by,
+                bar_max_w,
+                bar_h,
+                Rgba([35, 40, 55, 255]),
+            );
+            draw_block(
+                &mut canvas,
+                bar_right_x,
+                by,
+                bar_max_w,
+                bar_h,
+                Rgba([35, 40, 55, 255]),
+            );
 
             // Filled bars
             let lw = ((card.left / 100.0).clamp(0.0, 1.0) * bar_max_w as f32) as u32;
             let rw_w = ((card.right / 100.0).clamp(0.0, 1.0) * bar_max_w as f32) as u32;
-            let l_color = if card.leader == "left" { Rgba([80, 255, 120, 255]) } else { Rgba([255, 143, 66, 255]) };
-            let r_color = if card.leader == "right" { Rgba([80, 255, 120, 255]) } else { Rgba([100, 180, 255, 255]) };
+            let l_color = if card.leader == "left" {
+                Rgba([80, 255, 120, 255])
+            } else {
+                Rgba([255, 143, 66, 255])
+            };
+            let r_color = if card.leader == "right" {
+                Rgba([80, 255, 120, 255])
+            } else {
+                Rgba([100, 180, 255, 255])
+            };
             draw_block(&mut canvas, bar_left_x, by, lw, bar_h, l_color);
             draw_block(&mut canvas, bar_right_x, by, rw_w, bar_h, r_color);
 
             // Numbers at end of each bar
-            draw_text_8x8(&mut canvas, bar_left_x + bar_max_w + 4, by + 2, &format!("{:.0}", card.left), Rgba([220, 220, 240, 255]), 1);
-            draw_text_8x8(&mut canvas, bar_right_x + bar_max_w + 4, by + 2, &format!("{:.0}", card.right), Rgba([220, 220, 240, 255]), 1);
+            draw_text_8x8(
+                &mut canvas,
+                bar_left_x + bar_max_w + 4,
+                by + 2,
+                &format!("{:.0}", card.left),
+                Rgba([220, 220, 240, 255]),
+                1,
+            );
+            draw_text_8x8(
+                &mut canvas,
+                bar_right_x + bar_max_w + 4,
+                by + 2,
+                &format!("{:.0}", card.right),
+                Rgba([220, 220, 240, 255]),
+                1,
+            );
         }
     }
 
     // ── Footer with margin and judge ─────────────────────────────────
     let footer_y = height.saturating_sub(60);
-    draw_text_8x8(&mut canvas, 28, footer_y, &format!("MARGIN +{:.1}  JUDGE {}", result.winner.margin, result.engine.judge_mode.to_uppercase()), Rgba([180, 180, 200, 255]), 1);
-    draw_text_8x8(&mut canvas, 28, footer_y + 18, "github.com/NomaDamas/BetterThanYou", Rgba([99, 235, 211, 255]), 1);
+    draw_text_8x8(
+        &mut canvas,
+        28,
+        footer_y,
+        &format!(
+            "MARGIN +{:.1}  JUDGE {}",
+            result.winner.margin,
+            result.engine.judge_mode.to_uppercase()
+        ),
+        Rgba([180, 180, 200, 255]),
+        1,
+    );
+    draw_text_8x8(
+        &mut canvas,
+        28,
+        footer_y + 18,
+        "github.com/NomaDamas/BetterThanYou",
+        Rgba([99, 235, 211, 255]),
+        1,
+    );
 
     canvas
 }
@@ -3276,7 +4194,14 @@ pub fn generate_share_bundle(result: &BattleResult, output_dir: &Path) -> Result
     let share_dir = output_dir.join(format!("{}-share", slugify(&result.battle_id)));
     fs::create_dir_all(&share_dir)?;
 
-    let platforms = ["x", "linkedin", "instagram_post", "instagram_story", "tiktok", "pinterest"];
+    let platforms = [
+        "x",
+        "linkedin",
+        "instagram_post",
+        "instagram_story",
+        "tiktok",
+        "pinterest",
+    ];
     let mut assets = Vec::new();
 
     for platform in platforms {
@@ -3298,7 +4223,10 @@ pub fn generate_share_bundle(result: &BattleResult, output_dir: &Path) -> Result
         assets: assets.clone(),
         manifest_path: share_dir.join("share-pack.json").display().to_string(),
     };
-    fs::write(&bundle.manifest_path, serde_json::to_string_pretty(&bundle)?)?;
+    fs::write(
+        &bundle.manifest_path,
+        serde_json::to_string_pretty(&bundle)?,
+    )?;
     Ok(bundle)
 }
 
@@ -3310,7 +4238,12 @@ fn render_public_share_page(
 ) -> String {
     let title = format!(
         "{} wins the BetterThanYou battle over {}",
-        result.winner.label, if result.winner.id == "left" { &result.inputs.right.label } else { &result.inputs.left.label }
+        result.winner.label,
+        if result.winner.id == "left" {
+            &result.inputs.right.label
+        } else {
+            &result.inputs.left.label
+        }
     );
     let description = format!(
         "{} Margin +{:.1}. {}",
@@ -3600,7 +4533,12 @@ pub fn qr_ascii(text: &str) -> String {
 
 /// Try uploading to litterbox.catbox.moe (temporary, 1h/12h/24h/72h, free, no auth).
 /// Returns a direct URL that phone browsers can render as HTML.
-async fn try_litterbox(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
+async fn try_litterbox(
+    client: &Client,
+    bytes: &[u8],
+    filename: &str,
+    mime: &str,
+) -> Result<String> {
     let form = reqwest::multipart::Form::new()
         .text("reqtype", "fileupload")
         .text("time", "72h")
@@ -3614,14 +4552,21 @@ async fn try_litterbox(client: &Client, bytes: &[u8], filename: &str, mime: &str
 
     let response = client
         .post("https://litterbox.catbox.moe/resources/internals/api.php")
-        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .header(
+            "User-Agent",
+            "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)",
+        )
         .multipart(form)
         .send()
         .await
         .with_context(|| "litterbox: network error")?;
 
     if !response.status().is_success() {
-        bail!("litterbox HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "litterbox HTTP {}: {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
     let text = response.text().await?.trim().to_string();
@@ -3645,14 +4590,21 @@ async fn try_catbox(client: &Client, bytes: &[u8], filename: &str, mime: &str) -
 
     let response = client
         .post("https://catbox.moe/user/api.php")
-        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .header(
+            "User-Agent",
+            "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)",
+        )
         .multipart(form)
         .send()
         .await
         .with_context(|| "catbox.moe: network error")?;
 
     if !response.status().is_success() {
-        bail!("catbox.moe HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "catbox.moe HTTP {}: {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
     let text = response.text().await?.trim().to_string();
@@ -3663,7 +4615,12 @@ async fn try_catbox(client: &Client, bytes: &[u8], filename: &str, mime: &str) -
 }
 
 /// Try uploading to tmpfiles.org (returns JSON with `data.url`).
-async fn try_tmpfiles_org(client: &Client, bytes: &[u8], filename: &str, mime: &str) -> Result<String> {
+async fn try_tmpfiles_org(
+    client: &Client,
+    bytes: &[u8],
+    filename: &str,
+    mime: &str,
+) -> Result<String> {
     let part = reqwest::multipart::Part::bytes(bytes.to_vec())
         .file_name(filename.to_string())
         .mime_str(mime)
@@ -3672,17 +4629,27 @@ async fn try_tmpfiles_org(client: &Client, bytes: &[u8], filename: &str, mime: &
 
     let response = client
         .post("https://tmpfiles.org/api/v1/upload")
-        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .header(
+            "User-Agent",
+            "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)",
+        )
         .multipart(form)
         .send()
         .await
         .with_context(|| "tmpfiles.org: network error")?;
 
     if !response.status().is_success() {
-        bail!("tmpfiles.org HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "tmpfiles.org HTTP {}: {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
-    let payload: Value = response.json().await.with_context(|| "tmpfiles.org: invalid JSON")?;
+    let payload: Value = response
+        .json()
+        .await
+        .with_context(|| "tmpfiles.org: invalid JSON")?;
     let raw_url = payload
         .get("data")
         .and_then(|d| d.get("url"))
@@ -3709,10 +4676,17 @@ async fn try_file_io(client: &Client, bytes: &[u8], filename: &str, mime: &str) 
         .with_context(|| "file.io: network error")?;
 
     if !response.status().is_success() {
-        bail!("file.io HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "file.io HTTP {}: {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
-    let payload: Value = response.json().await.with_context(|| "file.io: invalid JSON")?;
+    let payload: Value = response
+        .json()
+        .await
+        .with_context(|| "file.io: invalid JSON")?;
     let link = payload
         .get("link")
         .and_then(|u| u.as_str())
@@ -3780,7 +4754,11 @@ fn extract_release_version_from_url(url: &str) -> Option<String> {
 /// numeric comparison. Pre-release suffixes (`-rc.1` etc.) are ignored.
 pub fn is_newer_version(latest: &str, current: &str) -> bool {
     let parse = |s: &str| -> Option<(u32, u32, u32)> {
-        let cleaned = s.split(['-', '+']).next().unwrap_or(s);
+        let cleaned = s
+            .trim_start_matches('v')
+            .split(['-', '+'])
+            .next()
+            .unwrap_or(s);
         let parts: Vec<&str> = cleaned.split('.').collect();
         if parts.len() < 2 {
             return None;
@@ -3799,13 +4777,27 @@ pub fn is_newer_version(latest: &str, current: &str) -> bool {
 /// Read the configured nomadamas-style publish endpoint and token from env.
 /// Returns `Some((base_url, token))` only when both are non-empty; otherwise `None`.
 pub fn nomadamas_publish_config() -> Option<(String, String)> {
-    let url = std::env::var("BTYU_PUBLISH_URL")
-        .ok()
-        .filter(|v| !v.trim().is_empty())?;
-    let token = std::env::var("BTYU_PUBLISH_TOKEN")
-        .ok()
-        .filter(|v| !v.trim().is_empty())?;
-    Some((url.trim_end_matches('/').to_string(), token))
+    let token = first_non_empty_env(&[
+        "BTYU_PUBLISH_TOKEN",
+        "BTYU_CLOUDFLARE_PUBLISH_TOKEN",
+        "CLOUDFLARE_PUBLISH_TOKEN",
+        "PUBLISH_TOKEN",
+    ])?;
+    let url = first_non_empty_env(&[
+        "BTYU_PUBLISH_URL",
+        "BTYU_CLOUDFLARE_PUBLISH_URL",
+        "CLOUDFLARE_PUBLISH_URL",
+    ])
+    .unwrap_or_else(|| "https://better-than-you.nomadamas.org".to_string());
+    Some((
+        url.trim().trim_end_matches('/').to_string(),
+        token.trim().to_string(),
+    ))
+}
+
+fn first_non_empty_env(keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| std::env::var(key).ok().filter(|v| !v.trim().is_empty()))
 }
 
 /// Try uploading to a Cloudflare-Worker-backed nomadamas.org-style endpoint.
@@ -3875,14 +4867,21 @@ async fn try_0x0_st(client: &Client, bytes: &[u8], filename: &str, mime: &str) -
 
     let response = client
         .post("https://0x0.st")
-        .header("User-Agent", "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)")
+        .header(
+            "User-Agent",
+            "BetterThanYou/0.3 (+https://github.com/NomaDamas/BetterThanYou)",
+        )
         .multipart(form)
         .send()
         .await
         .with_context(|| "0x0.st: network error")?;
 
     if !response.status().is_success() {
-        bail!("0x0.st HTTP {}: {}", response.status(), response.text().await.unwrap_or_default());
+        bail!(
+            "0x0.st HTTP {}: {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        );
     }
 
     let url = response.text().await?.trim().to_string();
@@ -3913,14 +4912,28 @@ async fn publish_bytes_to_web(bytes: &[u8], filename: &str, mime: &str) -> Resul
 
     // Order: catbox (permanent) → litterbox (72h, very reliable) → tmpfiles → file.io → 0x0.st
     for (name, result) in [
-        ("catbox.moe", try_catbox(&client, bytes, filename, mime).await),
-        ("litterbox.catbox.moe (72h)", try_litterbox(&client, bytes, filename, mime).await),
-        ("tmpfiles.org", try_tmpfiles_org(&client, bytes, filename, mime).await),
+        (
+            "catbox.moe",
+            try_catbox(&client, bytes, filename, mime).await,
+        ),
+        (
+            "litterbox.catbox.moe (72h)",
+            try_litterbox(&client, bytes, filename, mime).await,
+        ),
+        (
+            "tmpfiles.org",
+            try_tmpfiles_org(&client, bytes, filename, mime).await,
+        ),
         ("file.io", try_file_io(&client, bytes, filename, mime).await),
         ("0x0.st", try_0x0_st(&client, bytes, filename, mime).await),
     ] {
         match result {
-            Ok(url) => return Ok(PublishedAsset { url, provider: name.to_string() }),
+            Ok(url) => {
+                return Ok(PublishedAsset {
+                    url,
+                    provider: name.to_string(),
+                })
+            }
             Err(e) => {
                 last_err = Some(format!("{}: {}", name, e));
             }
@@ -3944,14 +4957,26 @@ async fn publish_bytes_to_nomadamas(
     let url = try_nomadamas_share(client, base_url, token, bytes, filename, mime).await?;
     Ok(PublishedAsset {
         url,
-        provider: "nomadamas.org".to_string(),
+        provider: nomadamas_provider_name(base_url),
     })
+}
+
+fn nomadamas_provider_name(base_url: &str) -> String {
+    base_url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .filter(|host| !host.is_empty())
+        .unwrap_or("nomadamas.org")
+        .to_string()
 }
 
 /// Upload an HTML file to a free temporary file host and return the public URL.
 /// Tries multiple hosts in order and returns the first that succeeds.
 pub async fn publish_html_to_web(html_path: &Path) -> Result<PublishedReport> {
-    let bytes = fs::read(html_path).with_context(|| format!("failed to read {}", html_path.display()))?;
+    let bytes =
+        fs::read(html_path).with_context(|| format!("failed to read {}", html_path.display()))?;
     let filename = html_path
         .file_name()
         .and_then(|s| s.to_str())
@@ -3987,15 +5012,17 @@ pub async fn publish_share_bundle_to_web(
         .unwrap_or("share-preview.png")
         .to_string();
 
-    let html_bytes = fs::read(html_path)
-        .with_context(|| format!("failed to read {}", html_path.display()))?;
+    let html_bytes =
+        fs::read(html_path).with_context(|| format!("failed to read {}", html_path.display()))?;
     let html_name = html_path
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("battle.html")
         .to_string();
 
-    let (published_preview, published_report, published_page) = if let Some((base_url, token)) = nomadamas_publish_config() {
+    let (published_preview, published_report, published_page) = if let Some((base_url, token)) =
+        nomadamas_publish_config()
+    {
         let client = Client::new();
         let published_preview = publish_bytes_to_nomadamas(
             &client,
@@ -4039,7 +5066,8 @@ pub async fn publish_share_bundle_to_web(
         .await?;
         (published_preview, published_report, published_page)
     } else {
-        let published_preview = publish_bytes_to_web(&preview_bytes, &preview_name, "image/png").await?;
+        let published_preview =
+            publish_bytes_to_web(&preview_bytes, &preview_name, "image/png").await?;
         let published_report = publish_html_to_web(html_path).await?;
         let caption = share_caption(result, "x");
         let share_page_html = render_public_share_page(
@@ -4049,12 +5077,14 @@ pub async fn publish_share_bundle_to_web(
             &published_report.url,
         );
         let share_page_name = format!("{}-share-page.html", slugify(&result.battle_id));
-        let published_page = publish_bytes_to_web(share_page_html.as_bytes(), &share_page_name, "text/html").await?;
+        let published_page =
+            publish_bytes_to_web(share_page_html.as_bytes(), &share_page_name, "text/html").await?;
         (published_preview, published_report, published_page)
     };
 
     let caption = share_caption(result, "x");
-    let social_links = build_social_share_links(&published_page.url, &published_preview.url, &caption);
+    let social_links =
+        build_social_share_links(&published_page.url, &published_preview.url, &caption);
 
     Ok(PublishedShareBundle {
         share_page_url: published_page.url.clone(),
@@ -4083,15 +5113,17 @@ pub struct ServeInfo {
 /// Start a blocking local HTTP server that serves the given directory.
 /// Returns when the server is stopped (Ctrl-C). Prints the URL + QR before blocking.
 pub fn serve_reports_blocking(reports_dir: &Path, port: u16) -> Result<ServeInfo> {
-    use tiny_http::{Header, Response, Server, StatusCode};
     use std::path::PathBuf;
+    use tiny_http::{Header, Response, Server, StatusCode};
 
     let bind = format!("0.0.0.0:{}", port);
     let server = Server::http(&bind).map_err(|e| anyhow!("failed to bind {bind}: {e}"))?;
 
     let lan_ip = local_ip_address::local_ip().ok().map(|ip| ip.to_string());
     let local_url = format!("http://localhost:{}/latest-battle.html", port);
-    let lan_url = lan_ip.as_ref().map(|ip| format!("http://{}:{}/latest-battle.html", ip, port));
+    let lan_url = lan_ip
+        .as_ref()
+        .map(|ip| format!("http://{}:{}/latest-battle.html", ip, port));
     let info = ServeInfo {
         local_url: local_url.clone(),
         lan_url: lan_url.clone(),
@@ -4174,7 +5206,13 @@ mod tests {
             let in_face = x > 30 && x < 98 && y > 22 && y < 138;
             let in_hair = x > 18 && x < 110 && y > 8 && y < 70;
             let in_shoulders = y > 106 && x > 10 && x < 118;
-            *pixel = if in_face { Rgba(accent) } else if in_hair || in_shoulders { Rgba(color) } else { Rgba([16, 18, 24, 255]) };
+            *pixel = if in_face {
+                Rgba(accent)
+            } else if in_hair || in_shoulders {
+                Rgba(color)
+            } else {
+                Rgba([16, 18, 24, 255])
+            };
         }
         image.save(path).unwrap();
     }
@@ -4194,13 +5232,25 @@ mod tests {
     #[test]
     fn extract_release_version_from_redirect_url() {
         assert_eq!(
-            extract_release_version_from_url("https://github.com/NomaDamas/BetterThanYou/releases/tag/v0.8.16"),
+            extract_release_version_from_url(
+                "https://github.com/NomaDamas/BetterThanYou/releases/tag/v0.8.16"
+            ),
             Some("0.8.16".to_string())
         );
         assert_eq!(
-            extract_release_version_from_url("https://github.com/NomaDamas/BetterThanYou/releases/tag/v1.2.3?foo=bar"),
+            extract_release_version_from_url(
+                "https://github.com/NomaDamas/BetterThanYou/releases/tag/v1.2.3?foo=bar"
+            ),
             Some("1.2.3".to_string())
         );
+    }
+
+    #[test]
+    fn same_release_version_is_not_newer() {
+        assert!(!is_newer_version("0.8.16", "0.8.16"));
+        assert!(!is_newer_version("v0.8.16", "0.8.16"));
+        assert!(is_newer_version("0.8.17", "0.8.16"));
+        assert!(is_newer_version("v0.8.17", "0.8.16"));
     }
 
     #[tokio::test]
@@ -4221,7 +5271,9 @@ mod tests {
             openai_config: OpenAiConfig::default(),
             axis_weights: Vec::new(),
             language: Language::English,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         let result_b = analyze_portrait_battle(AnalyzeOptions {
             left_source: left.display().to_string(),
@@ -4233,7 +5285,9 @@ mod tests {
             openai_config: OpenAiConfig::default(),
             axis_weights: Vec::new(),
             language: Language::English,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         assert_eq!(result_a.winner.id, result_b.winner.id);
         assert_eq!(result_a.axis_cards.len(), 10);
@@ -4247,38 +5301,64 @@ mod tests {
         fixture_image(&left, [240, 180, 150, 255], [255, 240, 228, 255]);
         fixture_image(&right, [32, 60, 112, 255], [122, 240, 212, 255]);
 
-        let result = analyze_portrait_battle_with_override(AnalyzeOptions {
-            left_source: left.display().to_string(),
-            right_source: right.display().to_string(),
-            left_label: Some("Aurora".into()),
-            right_label: Some("Nova".into()),
-            judge_mode: JudgeMode::Openai,
-            openai_model: DEFAULT_OPENAI_MODEL.into(),
-            openai_config: OpenAiConfig::default(),
-            axis_weights: Vec::new(),
-            language: Language::English,
-        }, Some(OpenAiJudgeOutput {
-            winner_id: "right".into(),
-            left_scores: AxisScores {
-                facial_symmetry: 70.0, facial_proportions: 65.0, skin_quality: 62.0, eye_expression: 58.0,
-                hair_grooming: 60.0, bone_structure: 64.0, expression_charisma: 55.0, lighting_color: 61.0,
-                background_framing: 68.0, photogenic_impact: 57.0,
+        let result = analyze_portrait_battle_with_override(
+            AnalyzeOptions {
+                left_source: left.display().to_string(),
+                right_source: right.display().to_string(),
+                left_label: Some("Aurora".into()),
+                right_label: Some("Nova".into()),
+                judge_mode: JudgeMode::Openai,
+                openai_model: DEFAULT_OPENAI_MODEL.into(),
+                openai_config: OpenAiConfig::default(),
+                axis_weights: Vec::new(),
+                language: Language::English,
             },
-            right_scores: AxisScores {
-                facial_symmetry: 82.0, facial_proportions: 84.0, skin_quality: 86.0, eye_expression: 88.0,
-                hair_grooming: 80.0, bone_structure: 85.0, expression_charisma: 90.0, lighting_color: 87.0,
-                background_framing: 83.0, photogenic_impact: 92.0,
-            },
-            sections: BattleSections {
-                overall_take: "Nova wins on expression and overall impact.".into(),
-                strengths: SideTexts { left: "Cleaner symmetry.".into(), right: "Much stronger expression and aura.".into() },
-                weaknesses: SideTexts { left: "Feels flat.".into(), right: "Slightly less balanced.".into() },
-                why_this_won: "Nova built separation in expression and photogenic impact.".into(),
-                model_jury_notes: "Stubbed VLM path.".into(),
-            },
-            provider: "openai".into(),
-            model: DEFAULT_OPENAI_MODEL.into(),
-        })).await.unwrap();
+            Some(OpenAiJudgeOutput {
+                winner_id: "right".into(),
+                left_scores: AxisScores {
+                    facial_symmetry: 70.0,
+                    facial_proportions: 65.0,
+                    skin_quality: 62.0,
+                    eye_expression: 58.0,
+                    hair_grooming: 60.0,
+                    bone_structure: 64.0,
+                    expression_charisma: 55.0,
+                    lighting_color: 61.0,
+                    background_framing: 68.0,
+                    photogenic_impact: 57.0,
+                },
+                right_scores: AxisScores {
+                    facial_symmetry: 82.0,
+                    facial_proportions: 84.0,
+                    skin_quality: 86.0,
+                    eye_expression: 88.0,
+                    hair_grooming: 80.0,
+                    bone_structure: 85.0,
+                    expression_charisma: 90.0,
+                    lighting_color: 87.0,
+                    background_framing: 83.0,
+                    photogenic_impact: 92.0,
+                },
+                sections: BattleSections {
+                    overall_take: "Nova wins on expression and overall impact.".into(),
+                    strengths: SideTexts {
+                        left: "Cleaner symmetry.".into(),
+                        right: "Much stronger expression and aura.".into(),
+                    },
+                    weaknesses: SideTexts {
+                        left: "Feels flat.".into(),
+                        right: "Slightly less balanced.".into(),
+                    },
+                    why_this_won: "Nova built separation in expression and photogenic impact."
+                        .into(),
+                    model_jury_notes: "Stubbed VLM path.".into(),
+                },
+                provider: "openai".into(),
+                model: DEFAULT_OPENAI_MODEL.into(),
+            }),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.engine.judge_mode, "openai");
         assert_eq!(result.winner.id, "right");
@@ -4302,7 +5382,9 @@ mod tests {
             openai_config: OpenAiConfig::default(),
             axis_weights: Vec::new(),
             language: Language::English,
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         let html = render_public_share_page(
             &result,
@@ -4326,13 +5408,27 @@ mod tests {
         );
 
         let x = links.iter().find(|link| link.platform == "x").unwrap();
-        assert!(x.share_url.as_ref().unwrap().contains("twitter.com/intent/tweet"));
+        assert!(x
+            .share_url
+            .as_ref()
+            .unwrap()
+            .contains("twitter.com/intent/tweet"));
         assert!(x.share_url.as_ref().unwrap().contains("share.example.com"));
 
-        let pinterest = links.iter().find(|link| link.platform == "pinterest").unwrap();
-        assert!(pinterest.share_url.as_ref().unwrap().contains("preview.png"));
+        let pinterest = links
+            .iter()
+            .find(|link| link.platform == "pinterest")
+            .unwrap();
+        assert!(pinterest
+            .share_url
+            .as_ref()
+            .unwrap()
+            .contains("preview.png"));
 
-        let instagram = links.iter().find(|link| link.platform == "instagram_post").unwrap();
+        let instagram = links
+            .iter()
+            .find(|link| link.platform == "instagram_post")
+            .unwrap();
         assert!(instagram.share_url.is_none());
     }
 }
@@ -4352,7 +5448,11 @@ const ANSI_ORANGE: &str = "\u{1b}[38;2;255;143;66m";
 const ANSI_LIGHT: &str = "\u{1b}[38;2;220;220;240m";
 
 fn paint(text: &str, color: &str, enabled: bool) -> String {
-    if enabled { format!("{}{}{}", color, text, ANSI_RESET) } else { text.to_string() }
+    if enabled {
+        format!("{}{}{}", color, text, ANSI_RESET)
+    } else {
+        text.to_string()
+    }
 }
 
 fn game_meter(score: f32, width: usize) -> String {
@@ -4363,21 +5463,35 @@ fn game_meter(score: f32, width: usize) -> String {
 }
 
 fn score_rank_ansi(score: f32) -> (&'static str, &'static str) {
-    if score >= 95.0 { ("S+", ANSI_GOLD) }
-    else if score >= 90.0 { ("S", ANSI_AMBER) }
-    else if score >= 80.0 { ("A", ANSI_GREEN) }
-    else if score >= 70.0 { ("B", ANSI_CYAN) }
-    else if score >= 60.0 { ("C", ANSI_ORANGE) }
-    else if score >= 50.0 { ("D", ANSI_RED) }
-    else { ("F", ANSI_RED) }
+    if score >= 95.0 {
+        ("S+", ANSI_GOLD)
+    } else if score >= 90.0 {
+        ("S", ANSI_AMBER)
+    } else if score >= 80.0 {
+        ("A", ANSI_GREEN)
+    } else if score >= 70.0 {
+        ("B", ANSI_CYAN)
+    } else if score >= 60.0 {
+        ("C", ANSI_ORANGE)
+    } else if score >= 50.0 {
+        ("D", ANSI_RED)
+    } else {
+        ("F", ANSI_RED)
+    }
 }
 
 fn meter_color_ansi(score: f32) -> &'static str {
-    if score >= 90.0 { ANSI_GOLD }
-    else if score >= 75.0 { ANSI_GREEN }
-    else if score >= 60.0 { ANSI_CYAN }
-    else if score >= 45.0 { ANSI_ORANGE }
-    else { ANSI_RED }
+    if score >= 90.0 {
+        ANSI_GOLD
+    } else if score >= 75.0 {
+        ANSI_GREEN
+    } else if score >= 60.0 {
+        ANSI_CYAN
+    } else if score >= 45.0 {
+        ANSI_ORANGE
+    } else {
+        ANSI_RED
+    }
 }
 
 fn pad_center(value: &str, width: usize) -> String {
@@ -4391,24 +5505,73 @@ fn boxed_title(title: &str, color: &str, width: usize, enabled: bool) -> [String
     let inner = width.saturating_sub(4);
     let centered = pad_center(title, inner);
     [
-        paint(&format!("\u{2554}{}\u{2557}", "\u{2550}".repeat(inner)), color, enabled),
-        paint(&format!("\u{2551} {} \u{2551}", &centered[1..centered.len().saturating_sub(1)]), color, enabled),
-        paint(&format!("\u{255A}{}\u{255D}", "\u{2550}".repeat(inner)), color, enabled),
+        paint(
+            &format!("\u{2554}{}\u{2557}", "\u{2550}".repeat(inner)),
+            color,
+            enabled,
+        ),
+        paint(
+            &format!(
+                "\u{2551} {} \u{2551}",
+                &centered[1..centered.len().saturating_sub(1)]
+            ),
+            color,
+            enabled,
+        ),
+        paint(
+            &format!("\u{255A}{}\u{255D}", "\u{2550}".repeat(inner)),
+            color,
+            enabled,
+        ),
     ]
 }
 
-fn game_panel(title: &str, body: &[String], width: usize, border_color: &str, enabled: bool) -> Vec<String> {
+fn game_panel(
+    title: &str,
+    body: &[String],
+    width: usize,
+    border_color: &str,
+    enabled: bool,
+) -> Vec<String> {
     let inner = width.saturating_sub(4);
     let mut lines = Vec::new();
     let decorated_title = format!("\u{25C6} {} \u{25C6}", title);
-    lines.push(paint(&format!("\u{250C}{}\u{2510}", "\u{2500}".repeat(inner)), border_color, enabled));
-    lines.push(paint(&format!("\u{2502} {:<width$} \u{2502}", decorated_title, width = inner - 2), border_color, enabled));
-    lines.push(paint(&format!("\u{251C}{}\u{2524}", "\u{2500}".repeat(inner)), border_color, enabled));
+    lines.push(paint(
+        &format!("\u{250C}{}\u{2510}", "\u{2500}".repeat(inner)),
+        border_color,
+        enabled,
+    ));
+    lines.push(paint(
+        &format!(
+            "\u{2502} {:<width$} \u{2502}",
+            decorated_title,
+            width = inner - 2
+        ),
+        border_color,
+        enabled,
+    ));
+    lines.push(paint(
+        &format!("\u{251C}{}\u{2524}", "\u{2500}".repeat(inner)),
+        border_color,
+        enabled,
+    ));
     for line in body {
-        let clipped = if line.chars().count() > inner - 2 { line.chars().take(inner - 2).collect::<String>() } else { line.clone() };
-        lines.push(format!("\u{2502} {:<width$} \u{2502}", clipped, width = inner - 2));
+        let clipped = if line.chars().count() > inner - 2 {
+            line.chars().take(inner - 2).collect::<String>()
+        } else {
+            line.clone()
+        };
+        lines.push(format!(
+            "\u{2502} {:<width$} \u{2502}",
+            clipped,
+            width = inner - 2
+        ));
     }
-    lines.push(paint(&format!("\u{2514}{}\u{2518}", "\u{2500}".repeat(inner)), border_color, enabled));
+    lines.push(paint(
+        &format!("\u{2514}{}\u{2518}", "\u{2500}".repeat(inner)),
+        border_color,
+        enabled,
+    ));
     lines
 }
 
@@ -4417,54 +5580,81 @@ fn signed_gap(card: &AxisCard, winner_id: &str) -> (String, &'static str) {
         return (" TIE ".to_string(), ANSI_CYAN);
     }
     let sign = if card.leader == winner_id { "+" } else { "-" };
-    let color = if card.leader == winner_id { ANSI_GREEN } else { ANSI_RED };
-    (format!("{:>5}", format!("{}{:0.1}", sign, card.diff)), color)
+    let color = if card.leader == winner_id {
+        ANSI_GREEN
+    } else {
+        ANSI_RED
+    };
+    (
+        format!("{:>5}", format!("{}{:0.1}", sign, card.diff)),
+        color,
+    )
 }
 
-fn vs_banner(left_label: &str, right_label: &str, left_score: f32, right_score: f32, width: usize, enabled: bool) -> Vec<String> {
+fn vs_banner(
+    left_label: &str,
+    right_label: &str,
+    left_score: f32,
+    right_score: f32,
+    width: usize,
+    enabled: bool,
+) -> Vec<String> {
     let inner = width.saturating_sub(4);
     let (left_rank, left_rank_color) = score_rank_ansi(left_score);
     let (right_rank, right_rank_color) = score_rank_ansi(right_score);
 
     let vs_line = format!(
         "{} [{:.1}] {}  \u{2694} VS \u{2694}  {} [{:.1}] {}",
-        left_label.to_uppercase(), left_score, left_rank,
-        right_label.to_uppercase(), right_score, right_rank
+        left_label.to_uppercase(),
+        left_score,
+        left_rank,
+        right_label.to_uppercase(),
+        right_score,
+        right_rank
     );
     let centered_vs = pad_center(&vs_line, inner);
 
     let mut lines = Vec::new();
-    lines.push(paint(&format!("\u{2554}{}\u{2557}", "\u{2550}".repeat(inner)), ANSI_MAGENTA, enabled));
+    lines.push(paint(
+        &format!("\u{2554}{}\u{2557}", "\u{2550}".repeat(inner)),
+        ANSI_MAGENTA,
+        enabled,
+    ));
     if enabled {
         let raw_vs = format!(
             "{} [{}] {}  {} \u{2694} VS \u{2694} {}  {} [{}] {}",
-            paint(
-                &left_label.to_uppercase(),
-                ANSI_ORANGE,
-                true,
-            ),
+            paint(&left_label.to_uppercase(), ANSI_ORANGE, true,),
             paint(&format!("{:.1}", left_score), ANSI_LIGHT, true),
             paint(left_rank, left_rank_color, true),
             ANSI_MAGENTA,
             ANSI_RESET,
-            paint(
-                &right_label.to_uppercase(),
-                ANSI_BLUE,
-                true,
-            ),
+            paint(&right_label.to_uppercase(), ANSI_BLUE, true,),
             paint(&format!("{:.1}", right_score), ANSI_LIGHT, true),
             paint(right_rank, right_rank_color, true),
         );
         let padded = pad_center(&raw_vs, inner + 100);
-        lines.push(format!("{mag}\u{2551}{rst}{content}{mag}\u{2551}{rst}", mag = ANSI_MAGENTA, rst = ANSI_RESET, content = padded));
+        lines.push(format!(
+            "{mag}\u{2551}{rst}{content}{mag}\u{2551}{rst}",
+            mag = ANSI_MAGENTA,
+            rst = ANSI_RESET,
+            content = padded
+        ));
     } else {
         lines.push(format!("\u{2551}{}\u{2551}", centered_vs));
     }
-    lines.push(paint(&format!("\u{255A}{}\u{255D}", "\u{2550}".repeat(inner)), ANSI_MAGENTA, enabled));
+    lines.push(paint(
+        &format!("\u{255A}{}\u{255D}", "\u{2550}".repeat(inner)),
+        ANSI_MAGENTA,
+        enabled,
+    ));
     lines
 }
 
-pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts, color: bool) -> String {
+pub fn render_terminal_battle(
+    result: &BattleResult,
+    artifacts: &SavedArtifacts,
+    color: bool,
+) -> String {
     let width = 92;
     let mut lines = Vec::new();
 
@@ -4486,7 +5676,11 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
     for (i, logo) in logo_lines.iter().enumerate() {
         lines.push(paint(logo, gradient_colors[i], color));
     }
-    lines.push(paint("                        C L I   P O R T R A I T   B A T T L E", ANSI_CYAN, color));
+    lines.push(paint(
+        "                        C L I   P O R T R A I T   B A T T L E",
+        ANSI_CYAN,
+        color,
+    ));
     lines.push(String::new());
 
     // ── VS banner ──────────────────────────────────────────────────
@@ -4504,20 +5698,33 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
         "\u{1F3C6} WINNER: {}  \u{25B2} +{:.1} margin{}",
         result.winner.label.to_uppercase(),
         result.winner.margin,
-        if result.winner.decisive { "  DECISIVE!" } else { "" }
+        if result.winner.decisive {
+            "  DECISIVE!"
+        } else {
+            ""
+        }
     );
     lines.extend(boxed_title(&winner_text, ANSI_GOLD, width, color));
     lines.push(String::new());
 
     // ── Summary ────────────────────────────────────────────────────
     let judge_line = if let Some(model) = &result.engine.model {
-        format!("\u{2696}  Judge: {} via {}", result.engine.judge_mode, model)
+        format!(
+            "\u{2696}  Judge: {} via {}",
+            result.engine.judge_mode, model
+        )
     } else {
         format!("\u{2696}  Judge: {}", result.engine.judge_mode)
     };
     let summary = vec![
-        format!("\u{1F7E0} Left   : {} {:.1}", result.inputs.left.label, result.scores.left.total),
-        format!("\u{1F535} Right  : {} {:.1}", result.inputs.right.label, result.scores.right.total),
+        format!(
+            "\u{1F7E0} Left   : {} {:.1}",
+            result.inputs.left.label, result.scores.left.total
+        ),
+        format!(
+            "\u{1F535} Right  : {} {:.1}",
+            result.inputs.right.label, result.scores.right.total
+        ),
         format!("\u{1F4CA} Margin : {:.1} points", result.winner.margin),
         judge_line,
     ];
@@ -4545,7 +5752,11 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
             gap_text
         ));
 
-        let left_meter = paint(&game_meter(card.left, 16), meter_color_ansi(card.left), color);
+        let left_meter = paint(
+            &game_meter(card.left, 16),
+            meter_color_ansi(card.left),
+            color,
+        );
         let (left_rank, left_rc) = score_rank_ansi(card.left);
         lines.push(format!(
             "    {} {} {} {}",
@@ -4555,7 +5766,11 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
             paint(left_rank, left_rc, color)
         ));
 
-        let right_meter = paint(&game_meter(card.right, 16), meter_color_ansi(card.right), color);
+        let right_meter = paint(
+            &game_meter(card.right, 16),
+            meter_color_ansi(card.right),
+            color,
+        );
         let (right_rank, right_rc) = score_rank_ansi(card.right);
         lines.push(format!(
             "    {} {} {} {}",
@@ -4575,7 +5790,13 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
         String::new(),
         format!("\u{1F4DD} Notes: {}", result.sections.model_jury_notes),
     ];
-    lines.extend(game_panel("JUDGE ANALYSIS", &analysis, width, ANSI_PURPLE, color));
+    lines.extend(game_panel(
+        "JUDGE ANALYSIS",
+        &analysis,
+        width,
+        ANSI_PURPLE,
+        color,
+    ));
     lines.push(String::new());
 
     // ── Files ──────────────────────────────────────────────────────
@@ -4583,18 +5804,36 @@ pub fn render_terminal_battle(result: &BattleResult, artifacts: &SavedArtifacts,
         format!("\u{1F4C4} HTML report : {}", artifacts.html_path),
         format!("\u{1F4C4} JSON result : {}", artifacts.json_path),
     ];
-    lines.extend(game_panel("SAVED ARTIFACTS", &files, width, ANSI_DIM, color));
+    lines.extend(game_panel(
+        "SAVED ARTIFACTS",
+        &files,
+        width,
+        ANSI_DIM,
+        color,
+    ));
     lines.join("\n")
 }
 
 pub fn render_report_summary(report: &SavedArtifacts, color: bool) -> String {
     let mut lines = Vec::new();
-    lines.extend(boxed_title("BETTERTHANYOU // REPORT REBUILT", ANSI_BOLD, 84, color));
-    lines.push(paint(&format!("HTML report : {}", report.html_path), ANSI_DIM, color));
-    lines.push(paint(&format!("JSON result : {}", report.json_path), ANSI_DIM, color));
+    lines.extend(boxed_title(
+        "BETTERTHANYOU // REPORT REBUILT",
+        ANSI_BOLD,
+        84,
+        color,
+    ));
+    lines.push(paint(
+        &format!("HTML report : {}", report.html_path),
+        ANSI_DIM,
+        color,
+    ));
+    lines.push(paint(
+        &format!("JSON result : {}", report.json_path),
+        ANSI_DIM,
+        color,
+    ));
     lines.join("\n")
 }
-
 
 fn write_tui_screen(stdout: &mut io::Stdout, screen: &str) -> Result<()> {
     execute!(stdout, cursor::MoveTo(0, 0))?;
@@ -4610,17 +5849,29 @@ pub fn render_open_summary(path: &Path, color: bool) -> String {
     paint(&format!("Opened: {}", path.display()), ANSI_DIM, color)
 }
 
-pub fn present_terminal_battle_app(result: &BattleResult, artifacts: &SavedArtifacts, on_open: Option<fn(&Path) -> Result<()>>) -> Result<()> {
+pub fn present_terminal_battle_app(
+    result: &BattleResult,
+    artifacts: &SavedArtifacts,
+    on_open: Option<fn(&Path) -> Result<()>>,
+) -> Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     if !stdin.is_terminal() || !stdout.is_terminal() {
-        writeln!(stdout, "{}", render_terminal_battle(result, artifacts, false))?;
+        writeln!(
+            stdout,
+            "{}",
+            render_terminal_battle(result, artifacts, false)
+        )?;
         return Ok(());
     }
 
     enable_raw_mode()?;
     execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
-    let screen = format!("{}\n{}", render_terminal_battle(result, artifacts, true), paint("Keys: [o] open report  [q] quit", ANSI_DIM, true));
+    let screen = format!(
+        "{}\n{}",
+        render_terminal_battle(result, artifacts, true),
+        paint("Keys: [o] open report  [q] quit", ANSI_DIM, true)
+    );
     write_tui_screen(&mut stdout, &screen)?;
 
     loop {
